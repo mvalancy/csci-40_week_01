@@ -16,6 +16,7 @@ export function buildTrack(seed = 7) {
   const ramps = []; // { x0, up, top, down, h }
   const mud = []; // { x0, x1, lanes: Set }
   const coolers = []; // { x, lane }
+  const boosts = []; // { x, lane } orange chevrons: free nitro burst
   const addRamp = (x0, h, up, top, down) => { ramps.push({ x0, h, up, top, down }); return x0 + up + top + down; };
 
   let x = 70;
@@ -42,6 +43,7 @@ export function buildTrack(seed = 7) {
       x = addRamp(x, h, h * 2.3, 16 + rng() * 8, h * 2.4) + 30;
     }
     if (rng() < 0.35) coolers.push({ x: x - 12, lane: Math.floor(rng() * 4) });
+    else if (rng() < 0.45) boosts.push({ x: x - 12, lane: Math.floor(rng() * 4) });
   }
 
   // Sample the profile once so h(x) is a cheap lookup.
@@ -69,6 +71,7 @@ export function buildTrack(seed = 7) {
   const slope = (px) => Math.atan2(height(px + 0.15) - height(px - 0.15), 0.3);
   const inMud = (px, lane) => mud.some((m) => px >= m.x0 && px <= m.x1 && m.lanes.has(lane));
   const onCooler = (px, lane) => coolers.some((c) => Math.abs(px - c.x) < 1.5 && c.lane === lane);
+  const onBoost = (px, lane) => boosts.some((c) => Math.abs(px - c.x) < 1.5 && c.lane === lane);
 
-  return { ramps, mud, coolers, height, slope, inMud, onCooler, begin: TRACK_BEGIN, end: TRACK_END };
+  return { ramps, mud, coolers, boosts, height, slope, inMud, onCooler, onBoost, begin: TRACK_BEGIN, end: TRACK_END };
 }

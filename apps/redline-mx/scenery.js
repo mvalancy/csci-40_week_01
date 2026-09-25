@@ -12,9 +12,7 @@ import { buildVolcano } from './scenery-volcano.js';
 const BUILDERS = { stadium: buildStadium, canyon: buildCanyon, alpine: buildAlpine, neon: buildNeon, volcano: buildVolcano };
 
 export function createScenery(ctx) {
-  if (location.search.includes('noscenery')) return { update() {}, dispose() {} }; // DEBUG-REMOVE
   const kit = makeKit(ctx);
-  window.__dbgR = ctx.renderer; window.__dbgS = ctx.scene; // DEBUG-REMOVE
   const build = BUILDERS[ctx.biome.scenery] || BUILDERS.stadium;
   const anim = build(ctx, kit) || {};
   kit.flush();

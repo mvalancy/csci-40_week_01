@@ -13,7 +13,7 @@ import { createItems } from './items.js';
 import { createAudio } from './audio.js';
 import { setupTouch } from './touch.js';
 import { createGarage } from './garage.js';
-import { BIKES, ITEM_INFO, bikeById, statsFor, loadSave, writeSave, payout } from './progression.js';
+import { BIKES, ITEM_INFO, CUP, bikeById, statsFor, loadSave, writeSave, payout } from './progression.js';
 
 // ---------- save + world selection ----------
 const params = new URLSearchParams(location.search);
@@ -102,7 +102,8 @@ addEventListener('keydown', (e) => {
   if (e.key === 'ArrowUp') laneQueue -= 1;
   if (e.key === 'ArrowDown') laneQueue += 1;
   if (e.key === 'Enter') {
-    if (state === 'title' || state === 'finished') openGarage();
+    if (state === 'finished' && save.cup) nextCupRound();
+    else if (state === 'title' || state === 'finished' || state === 'cupdone') openGarage();
     else if (state === 'garage') raceFromGarage();
   }
   if (k === 'c') useAbility();
@@ -208,7 +209,31 @@ let abilityUses = 0;
 let lastPayout = 0;
 let newRecord = false;
 
-const garage = createGarage($('garage'), save, { onRace: () => raceFromGarage() });
+const garage = createGarage($('garage'), save, { onRace: () => raceFromGarage(), onCup: () => raceFromGarage() });
+
+function nextCupRound() {
+  if (save.cup.round >= CUP.worlds.length) {
+    // Cup over: trophy screen.
+    const order = Object.entries(save.cup.points).sort((a, b) => b[1] - a[1]);
+    const place = order.findIndex(([n]) => n === 'YOU') + 1;
+    const prize = CUP.prize[place - 1];
+    save.coins += prize;
+    if (place === 1) save.trophies += 1;
+    save.cup = null;
+    writeSave(save);
+    state = 'cupdone';
+    const el = $('results');
+    el.innerHTML = `<h2>${place === 1 ? '🏆 CHAMPION! 🏆' : `CUP: ${place}${['st', 'nd', 'rd', 'th'][place - 1]} PLACE`}</h2>
+      <table>${order.map(([n, p], i) => `<tr class="${n === 'YOU' ? 'me' : ''}"><td>${i + 1}.</td><td>${n}</td><td>${p} pts</td></tr>`).join('')}</table>
+      <p class="payout">+◉ ${prize} cup prize</p><p class="blink">PRESS ENTER FOR THE GARAGE</p>`;
+    el.hidden = false;
+    world.celebrate(player.x, player.y + 4, 400);
+    return;
+  }
+  save.biome = CUP.worlds[save.cup.round];
+  writeSave(save);
+  location.search = `?race${autopilot ? '&autostart' : ''}`;
+}
 
 function openGarage() {
   state = 'garage';
@@ -271,7 +296,9 @@ function showResults() {
   el.innerHTML = `<h2>${placeNow === 1 ? 'YOU WIN!' : 'FINISH!'}</h2><table>${rows}</table>
     <p class="record">${newRecord ? '★ NEW RECORD ★' : best ? `best ${fmt(best)}` : ''}</p>
     <p class="payout">+◉ ${lastPayout} <small>(${raceCoins} coins · ${player.flips} flips · ${player.perfects} perfect · ${player.crashes} crashes)</small></p>
-    <p class="blink">PRESS ENTER FOR THE GARAGE</p>`;
+    ${save.cup ? `<div class="cup-table"><b>CUP · after round ${save.cup.round}/5</b>
+      ${Object.entries(save.cup.points).sort((a, b) => b[1] - a[1]).map(([n, p]) => `<span class="${n === 'YOU' ? 'me' : ''}">${n} ${p}</span>`).join('')}</div>` : ''}
+    <p class="blink">${save.cup ? (save.cup.round >= CUP.worlds.length ? 'PRESS ENTER FOR THE CUP RESULTS' : `PRESS ENTER · NEXT: ${biomeById(CUP.worlds[save.cup.round]).name}`) : 'PRESS ENTER FOR THE GARAGE'}</p>`;
   el.hidden = false;
 }
 
@@ -282,6 +309,12 @@ function finishRace() {
   newRecord = !prev || player.finishTime < prev;
   if (newRecord) save.best[biome.id] = player.finishTime;
   lastPayout = payout({ place: placeNow, coins: raceCoins, flips: player.flips, perfects: player.perfects, crashes: player.crashes });
+  if (save.cup && CUP.worlds[save.cup.round] === biome.id) {
+    // Rivals that haven't finished yet are placed by distance.
+    standings().forEach((r, i) => (save.cup.points[r.name] += CUP.points[i]));
+    save.cup.results.push({ biome: biome.id, place: placeNow });
+    save.cup.round += 1;
+  }
   save.coins += lastPayout;
   save.races += 1;
   writeSave(save);
@@ -327,6 +360,7 @@ function applyItem(kind) {
   else if (kind === 'magnet') player.give('magnet', 8);
   else if (kind === 'rocket') player.hop(16);
   else if (kind === 'star') charge(50);
+  else if (kind === 'ring') { raceCoins += 5; charge(35); world.celebrate(player.x, player.y + 1, 30); }
 }
 
 function handleEvents(events) {
@@ -352,6 +386,8 @@ function handleEvents(events) {
           charge(40 * e.flips);
         } else if (e.perfect) { callout('PERFECT!', 'gold', 700); audio.perfect(); charge(25); }
       }
+    } else if (e.type === 'boost' && me) {
+      pickupToast('boost');
     } else if (e.type === 'overheat' && me) {
       callout('OVERHEAT!', 'red', 1500);
       audio.crash();
@@ -464,7 +500,8 @@ function renderHUD() {
 
 function frame(now) {
   timer.update(now);
-  const dt = Math.min(timer.getDelta(), 1 / 20);
+  // Physics steps at a fixed 1/120s, so we can catch up on slow frames without slow-motion.
+  const dt = Math.min(timer.getDelta(), 1 / 8);
   acc += dt;
   while (acc >= STEP) { simulate(STEP); acc -= STEP; }
   const t = timer.getElapsed();
@@ -534,6 +571,8 @@ const app = (window.__app = {
       raceCoins,
       bank: save.coins,
       lastPayout,
+      cup: save.cup ? { round: save.cup.round, points: { ...save.cup.points } } : null,
+      trophies: save.trophies,
       ability,
       abilityUses,
       env: { ...env },
@@ -563,6 +602,7 @@ app.debug = {
     mud: track.mud.map((m) => ({ x0: m.x0, x1: m.x1, lanes: [...m.lanes] })),
     coolers: track.coolers.map((c) => ({ ...c })),
   }),
+  boosts: () => track.boosts.map((b) => ({ ...b })),
   items: () => items.items.map((it) => ({ kind: it.kind, x: it.x, lane: it.lane, lift: it.lift, taken: it.taken })),
   teleport(x, lane = player.lane, speed = 0) {
     Object.assign(player, { x, lane, z: LANES[lane], y: track.height(x), airborne: false, speed, pitch: track.slope(x), crashTimer: 0 });
@@ -576,6 +616,13 @@ app.debug = {
     Object.assign(r, { x: player.x + dx, y: track.height(player.x + dx), airborne: false, crashTimer: 0 });
   },
   setHeat(h) { player.heat = h; },
+  // Launch the player so they sail through the ring at x (tests).
+  flyThrough(x, lane, lift) {
+    const gx = x - 6;
+    Object.assign(player, { x: gx, lane, z: LANES[lane], airborne: true, vx: 30, vy: 0, speed: 30, crashTimer: 0 });
+    player.y = track.height(x) + lift - 1 + 0.5 * env.gravity * (6 / 30) ** 2;
+    player.pitch = 0;
+  },
   shield() { player.shields = Math.min(3, player.shields + 1); },
   charge(n = 100) { charge(n); },
   giveCoins(n) { save.coins += n; writeSave(save); garage.render(); },

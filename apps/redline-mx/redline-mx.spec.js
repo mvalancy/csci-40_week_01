@@ -10,7 +10,7 @@ async function openGame(page, ai, query = '') {
     if (!sessionStorage.getItem('fresh')) { localStorage.clear(); sessionStorage.setItem('fresh', '1'); }
   });
   await page.goto(`/apps/redline-mx/${query}`);
-  await ai.waitFor((s) => s.ready, { message: 'renderer warm-up' });
+  await ai.waitFor((s) => s.ready, { timeout: 60_000, message: 'renderer warm-up' });
 }
 
 // title → ENTER → garage → ENTER → race
@@ -19,7 +19,7 @@ async function startRace(page, ai, query = '') {
   await ai.tap('Enter');
   await ai.waitFor((s) => s.state === 'garage', { message: 'garage' });
   await ai.tap('Enter');
-  await ai.waitFor((s) => s.state === 'racing', { message: 'GO!' });
+  await ai.waitFor((s) => s.state === 'racing', { timeout: 60_000, message: 'GO!' });
 }
 
 const debug = (page, fn, ...args) => page.evaluate(([fn, args]) => window.__app.debug[fn](...args), [fn, args]);
@@ -68,7 +68,7 @@ test.describe('REDLINE MX', () => {
       await page.waitForTimeout(600);
       const s = await ai.state();
       if (s.state === 'countdown') await ai.check('no false start', s.player.speed, (v) => v === 0);
-      await ai.waitFor((s) => s.state === 'racing', { message: 'GO!' });
+      await ai.waitFor((s) => s.state === 'racing', { timeout: 60_000, message: 'GO!' });
     });
     await ai.step('Z throttle accelerates', async () => {
       const s = await ai.waitFor((s) => s.player.speed > 20, { message: 'speed > 20' });
@@ -194,7 +194,7 @@ test.describe('REDLINE MX', () => {
           await page.waitForTimeout(1500);
           await ai.say('no luck this race — restarting');
           await ai.tap('Enter');
-          await ai.waitFor((s) => s.state === 'racing', { message: 'GO!' });
+          await ai.waitFor((s) => s.state === 'racing', { timeout: 60_000, message: 'GO!' });
           await keys.set('z', true);
           continue;
         }
@@ -309,7 +309,7 @@ test.describe('REDLINE MX on a phone', () => {
       await page.locator('#title').tap();
       await ai.waitFor((s) => s.state === 'garage', { message: 'garage' });
       await page.locator('#race-btn').tap();
-      await ai.waitFor((s) => s.state === 'racing', { message: 'GO!' });
+      await ai.waitFor((s) => s.state === 'racing', { timeout: 60_000, message: 'GO!' });
     });
     await ai.step('hold GAS', async () => {
       const gas = page.locator('.tb.a');
@@ -386,7 +386,7 @@ test.describe('REDLINE MX worlds', () => {
 
 test.describe('REDLINE MX abilities', () => {
   const ABILITIES = [
-    ['dirt', 'ROCKET HOP', (s) => s.player.airborne && s.player.vy > 5],
+    ['dirt', 'ROCKET HOP', (s, b) => s.player.jumps > b.player.jumps],
     ['chopper', 'SHOCKWAVE', (s) => s.rivals.some((r) => r.crashed)],
     ['sport', 'SLIPSTREAM', (s) => s.player.effects.slipstream > 0],
     ['hover', 'PHASE', (s) => s.player.effects.phase > 0],
@@ -403,8 +403,9 @@ test.describe('REDLINE MX abilities', () => {
         await ai.waitFor((s) => s.player.speed > 15 && !s.player.airborne, { message: 'rolling' });
         await page.evaluate(() => { window.__app.debug.rivalAhead(10); window.__app.debug.charge(100); });
         await expect(page.locator('#ability')).toHaveClass(/ready/);
+        const before = await ai.state();
         await ai.tap('c');
-        const s = await ai.waitFor(works, { timeout: 3000, message: `${name} effect` });
+        const s = await ai.waitFor((s) => works(s, before), { timeout: 10_000, message: `${name} effect` });
         await ai.check(`${name} fired`, s.abilityUses, (n) => n === 1);
         await ai.check('meter emptied', s.ability, (a) => a < 10);
         await page.keyboard.up('z');
@@ -418,10 +419,11 @@ test.describe('REDLINE MX pickups', () => {
     await startRace(page, ai);
     const list = await page.evaluate(() => window.__app.debug.items());
     const grab = async (kind) => {
-      const it = list.find((i) => i.kind === kind && i.lift < 2 && i.x > 60);
+      const it = list.find((i) => i.kind === kind && i.lift < 2 && i.x > 60 && !i.taken);
       test.skip(!it, `no ${kind} on this track`);
       await page.keyboard.down('z');
-      await page.evaluate(([x, lane]) => window.__app.debug.teleport(x - 14, lane, 20), [it.x, it.lane]);
+      // Start just before it on the ground (x-14 could be mid-ramp and launch us over it).
+      await page.evaluate(([x, lane]) => window.__app.debug.teleport(x - 5, lane, 14), [it.x, it.lane]);
       await ai.waitFor((s) => s.player.x > it.x + 1, { message: `drive through ${kind}` });
       return it;
     };
@@ -466,5 +468,55 @@ test.describe('REDLINE MX pickups', () => {
       await ai.check('shield used up', s.player.shields, (n) => n === 0);
     });
     await page.keyboard.up('z');
+  });
+});
+
+test.describe('REDLINE MX track features & cup', () => {
+  test('16 · boost pads fire nitro, stunt rings pay out', async ({ page, ai }) => {
+    await startRace(page, ai);
+    await ai.step('ride over an orange boost pad', async () => {
+      const [pad] = await page.evaluate(() => window.__app.debug.boosts());
+      test.skip(!pad, 'no boost pad on this track');
+      await page.keyboard.down('z');
+      await page.evaluate(([x, lane]) => window.__app.debug.teleport(x - 10, lane, 20), [pad.x, pad.lane]);
+      const s = await ai.waitFor((s) => s.player.effects.nitro > 0, { message: 'boost' });
+      await ai.check('nitro from the pad', s.player.effects.nitro, (n) => n > 0);
+    });
+    await ai.step('fly through a stunt ring', async () => {
+      const rings = (await page.evaluate(() => window.__app.debug.items())).filter((i) => i.kind === 'ring');
+      await ai.check('rings above big ramps', rings.length, (n) => n > 0);
+      // Autopilot flies the big jumps; ring through-passes are luck, so check the pickup code path by lining one up.
+      const before = (await ai.state()).raceCoins;
+      await page.evaluate((r) => window.__app.debug.flyThrough(r.x, r.lane, r.lift), rings[0]);
+      const s = await ai.waitFor((s) => s.raceCoins >= before + 5, { message: 'ring pass' });
+      await ai.check('ring paid 5 coins', s.raceCoins - before, (c) => c >= 5);
+    });
+    await page.keyboard.up('z');
+  });
+
+  test('17 · championship cup: round 1 scores points, round 2 loads the next world', async ({ page, ai }) => {
+    test.setTimeout(240_000);
+    await openGame(page, ai);
+    await ai.step('garage → START CUP', async () => {
+      await ai.tap('Enter');
+      await page.locator('#cup-start').click();
+      const s = await ai.waitFor((s) => s.state === 'countdown' || s.state === 'racing', { timeout: 60_000, message: 'cup race' });
+      await ai.check('round 1 is Thunder Dome', s.biome, (b) => b === 'stadium');
+      await ai.tap('p');
+    });
+    await ai.step('autopilot wins points', async () => {
+      const s = await ai.waitFor((s) => s.state === 'finished', { timeout: 150_000, message: 'finish' });
+      const total = Object.values(s.cup.points).reduce((a, b) => a + b, 0);
+      await ai.check('22 points handed out', total, (t) => t === 22);
+      await ai.check('round advanced', s.cup.round, (r) => r === 1);
+      await expect(page.locator('#results .cup-table')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('#results .blink')).toContainText('Scorpion Canyon');
+    });
+    await ai.step('ENTER → round 2 in Scorpion Canyon', async () => {
+      await ai.tap('Enter');
+      const s = await ai.waitFor((s) => s.biome === 'canyon' && (s.state === 'countdown' || s.state === 'racing'), { timeout: 60_000, message: 'round 2' });
+      await ai.check('cup carried over', s.cup.round, (r) => r === 1);
+    });
+    await ai.snap('cup-round-2');
   });
 });

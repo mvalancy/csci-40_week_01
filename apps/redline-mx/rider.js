@@ -163,6 +163,10 @@ export class Rider {
     else this.heat = Math.max(0, this.heat - s.cooling * dt);
     if (this.patch?.heat) this.heat += this.patch.heat * dt;
     if (t.onCooler(this.x, this.lane)) this.heat = 0;
+    if (!this.airborne && t.onBoost?.(this.x, this.lane) && !this.has('nitro')) {
+      this.give('nitro', 0.9);
+      events.push({ type: 'boost', rider: this });
+    }
     if (this.heat >= 100) {
       this.heat = 100;
       this.overheatTimer = OVERHEAT_TIME;

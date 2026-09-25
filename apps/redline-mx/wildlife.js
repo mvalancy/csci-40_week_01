@@ -34,10 +34,10 @@ const CFG = {
     spread: [2.6, 1.4], walk: 0.9, run: 8, fear: 15 },
   rabbit: { kind: 'walker', loco: 'hop', groups: 4, per: 1, size: 1.8, far: [-9, -10.8], near: [10, 12.5], nearP: 0.65,
     tints: ['#ffffff', '#f4f1ea', '#e8e4dc'], walk: 2.5, run: 9, fear: 15, hopV: 4, fleeHopV: 5.5 },
-  drone: { kind: 'hover', groups: 3, per: 1, size: 1.6 },
+  drone: { kind: 'hover', groups: 3, per: 1, size: 2.6 },
   cat: { kind: 'walker', special: 'cat', groups: 4, per: 1, size: 1.6, far: [-9, -10.8], near: [10, 12], nearP: 0.55,
     tints: ['#2a2a33', '#e08a3a', '#8c8c96', '#f0ece4', '#5a4a3a'], walk: 1.2, run: 10, fear: 15 },
-  bat: { kind: 'swarm', groups: 2, per: 10, size: 1.5, far: [-10, -16], y: [5, 8.5], amp: [3, 1.2, 1.8], freq: [1.6, 3.2], flapRate: 24, drift: 3, fear: 16 },
+  bat: { kind: 'swarm', groups: 2, per: 10, size: 2.3, far: [-2, -6], y: [6, 8.5], amp: [3.2, 1.2, 2.2], freq: [1.6, 3.2], flapRate: 24, drift: 3, fear: 16 },
   parrot: { kind: 'flock', groups: 3, per: 7, size: 2.0, far: [-9, -10.8], near: [9.8, 12.5], nearP: 0.55, spread: [3, 1.4],
     tints: ['#e8322a', '#2a7de8', '#2fc24a', '#f5c21b', '#ff7a1a', '#19c2c2'], fear: 16, flapRate: 22, cruise: [8, 13] },
   monkey: { kind: 'walker', special: 'monkey', loco: 'hop', groups: 4, per: 1, size: 1.7, far: [-9, -10.8], near: [10, 12], nearP: 0.45,
@@ -123,11 +123,12 @@ export function createWildlife(ctx) {
       for (let i = 0; i < n; i++) rocks.setMatrixAt(i, ZERO);
       root.add(rocks);
     }
-    const sp = { id, cfg, rig, bones, P, rocks, animals: [], groups: [], shadowBase: totalAnimals };
+    const shadow = { camel: 1.5, penguin: 0.55, dog: 0.9, goat: 0.85, cat: 0.65, monkey: 0.55, butterfly: 0.25 }[id] || 0.5;
+    const sp = { id, cfg, rig, bones, P, rocks, shadow, animals: [], groups: [], shadowBase: totalAnimals };
     for (let gi = 0; gi < cfg.groups; gi++) {
       const g = { i: gi, members: [], x: 0, z: 0, side: -1, active: false, scared: false, dormant: false };
       for (let k = 0; k < cfg.per; k++) {
-        const a = { idx: sp.animals.length, k, g, tint: new THREE.Color(), seed: R() * 100 };
+        const a = makeAnimal(sp.animals.length, k, g);
         g.members.push(a);
         sp.animals.push(a);
       }
@@ -147,13 +148,28 @@ export function createWildlife(ctx) {
   root.add(shadows);
 
   // ---------- spawning ----------
-  function resetAnimal(a) {
-    Object.assign(a, {
-      x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vx: 0, vy: 0, vz: 0, state: 'idle', timer: rr(0.5, 3),
-      phase: R() * TAU, gait: 0, air: 0, flap: R() * TAU, flapAmp: 0, dihedral: 0, look: 0, peck: 0, sit: 0,
-      happy: 0, bark: 0, blink: 0, scratch: false, slide: 0, pushups: 0, t: R() * 10, calm: 0, speed: 0,
+  // Animals are plain objects with one fixed shape (every field declared up
+  // front) so property access stays fast.
+  function makeAnimal(idx, k, g) {
+    const a = {
+      idx, k, g, tint: new THREE.Color(), seed: R() * 100, size: 1,
+      x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, vx: 0, vy: 0, vz: 0, state: 'idle', timer: 0,
+      phase: 0, gait: 0, air: 0, flap: 0, flapAmp: 0, dihedral: 0, look: 0, peck: 0, sit: 0,
+      happy: 0, bark: 0, blink: 0, scratch: false, slide: 0, pushups: 0, t: 0, calm: 0, speed: 0,
       ground: 0, hopWait: 0, flip: 0, airT: 0, airDur: 1, delay: -1, cool: 0, tx: 0, tz: 0, hidden: false,
-    });
+      fdx: 0, fdz: 0, chaseSpeed: 0, rock: null, f: null, ph: null, cruise: 0, fleeDir: 1, sitWant: 1,
+      init: false, drawn: false, dirX: 1,
+    };
+    return a;
+  }
+
+  function resetAnimal(a) {
+    a.x = a.y = a.z = a.yaw = a.pitch = a.roll = a.vx = a.vy = a.vz = 0;
+    a.state = 'idle'; a.timer = rr(0.5, 3); a.phase = R() * TAU; a.flap = R() * TAU; a.t = R() * 10;
+    a.gait = a.air = a.flapAmp = a.dihedral = a.look = a.peck = a.sit = a.happy = a.bark = a.blink = 0;
+    a.slide = a.pushups = a.calm = a.speed = a.ground = a.hopWait = a.flip = a.airT = a.cool = a.tx = a.tz = 0;
+    a.scratch = false; a.airDur = 1; a.delay = -1; a.hidden = false; a.rock = null; a.sitWant = 1;
+    a.drawn = false; a.init = false;
   }
 
   function spawnGroup(sp, g, x) {
@@ -177,7 +193,9 @@ export function createWildlife(ctx) {
     if (cfg.kind === 'swarm') { g.cx = x; g.cy = rr(cfg.y[0], cfg.y[1]); g.cz = g.z; }
     for (const a of g.members) {
       resetAnimal(a);
-      a.size = cfg.size * rr(0.88, 1.12);
+      // The foreground is close to the camera and the far side is far: compensate.
+      const sideScale = cfg.kind === 'walker' || cfg.kind === 'flock' || cfg.lowFlyer ? (g.side > 0 ? 0.72 : 1.35) : 1;
+      a.size = cfg.size * rr(0.88, 1.12) * sideScale;
       a.tint.set(cfg.tints ? pick(cfg.tints) : '#ffffff');
       if (cfg.kind === 'flock' || cfg.kind === 'walker') {
         a.x = g.x + (g.members.length > 1 ? (R() - 0.5) * spx : 0);
@@ -187,7 +205,7 @@ export function createWildlife(ctx) {
         a.tx = a.x; a.tz = a.z;
       }
       if (cfg.perch) {
-        a.rock = { x: a.x, z: a.z, s: rr(cfg.perch[0], cfg.perch[1]) };
+        a.rock = { x: a.x, z: a.z, s: rr(cfg.perch[0], cfg.perch[1]) * (g.side > 0 ? 0.5 : 1) };
         a.rock.top = a.rock.s * 0.82;
         a.ground = a.rock.top;
         a.x += rr(-0.2, 0.2) * a.rock.s;
@@ -280,7 +298,7 @@ export function createWildlife(ctx) {
 
     // dog: chase riders instead of fleeing
     if (id === 'dog') {
-      if (a.state !== 'chase' && a.cool <= 0 && th.dx < 4 && th.dx > -14 && Math.abs(th.z - a.z) < 20) {
+      if (a.state !== 'chase' && a.cool <= 0 && (focus.speed || 0) > 4 && th.dx < 4 && th.dx > -14 && Math.abs(th.z - a.z) < 20) {
         a.state = 'chase'; a.timer = rr(2.2, 3.4); a.sit = 0; a.cool = 9;
         a.chaseSpeed = clamp((focus.speed || 10) * 0.75, 8, 20);
       }
@@ -304,7 +322,7 @@ export function createWildlife(ctx) {
         if (Math.sin(a.t * 0.7 + a.seed) > 0.95) a.look = Math.sin(a.t * 3) * 0.6;
         else a.look = approach(a.look, 0, dt * 3);
         if (id === 'monkey') a.scratch = Math.sin(a.t * 0.9 + a.seed) > 0.6;
-        if (id === 'dog') a.sit = approach(a.sit, a.sitWant ?? 1, dt * 4);
+        if (id === 'dog') a.sit = approach(a.sit, a.sitWant, dt * 4);
         if (a.timer < 0) {
           a.state = 'walk';
           const r = a.rock ? a.rock.s * 0.45 : id === 'monkey' ? 5 : 3;
@@ -422,6 +440,8 @@ export function createWildlife(ctx) {
         a.blink = (a.t + a.seed) % 3.5 < 0.12 ? 1 : 0;
       }
     }
+    // Sitting dogs and cats rock back onto their haunches.
+    if ((id === 'dog' || id === 'cat') && a.air < 0.5) a.pitch = 0.42 * a.sit;
     // Penguin slide: tip onto the belly.
     if (id === 'penguin') a.pitch = -Math.PI / 2 * a.slide;
     keepSide(a, g);
@@ -548,10 +568,10 @@ export function createWildlife(ctx) {
   function stepHover(sp, a, g, dt, time, focus) {
     let lead = focus;
     for (const r of focus.riders || []) if (r.x > lead.x) lead = r;
-    const offs = [-3, 7, 16];
+    const offs = [-2, 9, 17];
     const tx = lead.x + offs[a.idx % 3];
-    const ty = (lead.y || 0) + 5.2 + (a.idx % 3) * 0.9 + Math.sin(time * 1.3 + a.seed) * 0.35;
-    const tz = -9.2 - (a.idx % 3) * 1.4 + Math.sin(time * 0.7 + a.seed) * 0.5;
+    const ty = (lead.y || 0) + 5.6 + (a.idx % 3) * 0.8 + Math.sin(time * 1.3 + a.seed) * 0.35;
+    const tz = [2, -3, 3.5][a.idx % 3] + Math.sin(time * 0.7 + a.seed) * 0.6;
     if (!a.init || Math.abs(a.x - tx) > 120) {
       a.init = true; a.x = tx; a.y = ty; a.z = tz; a.vx = a.vy = a.vz = 0;
     }
@@ -570,6 +590,11 @@ export function createWildlife(ctx) {
   }
 
   // ---------- drawing ----------
+  function hideAnimal(sp, a) {
+    for (const b of sp.bones) b.mesh.setMatrixAt(a.idx, ZERO);
+    shadows.setMatrixAt(sp.shadowBase + a.idx, ZERO);
+  }
+
   function draw(sp, a, time) {
     const { bones, P, rig } = sp;
     if (a.hidden) {
@@ -589,8 +614,8 @@ export function createWildlife(ctx) {
     MR.compose(V.set(a.x, a.y + lift * a.size, a.z), Q, S.set(a.size, a.size, a.size));
     for (const b of bones) {
       const q = P[b.def.name];
-      E.set(q.rx, q.ry, q.rz, 'XYZ');
-      Q.setFromEuler(E);
+      if (q.rx === 0 && q.ry === 0 && q.rz === 0) Q.identity();
+      else Q.setFromEuler(E.set(q.rx, q.ry, q.rz, 'XYZ'));
       MP.compose(V.set(b.at.x + q.ox, b.at.y + q.oy, b.at.z + q.oz), Q, S.set(q.s, q.s * q.sy, q.s));
       M.multiplyMatrices(MR, MP);
       b.mesh.setMatrixAt(a.idx, M);
@@ -602,7 +627,7 @@ export function createWildlife(ctx) {
     if (kind === 'hover' || kind === 'soar' || h > 6) {
       shadows.setMatrixAt(sp.shadowBase + a.idx, ZERO);
     } else {
-      const base = { camel: 1.5, penguin: 0.55, dog: 0.9, goat: 0.85, cat: 0.65, monkey: 0.55, butterfly: 0.25 }[sp.id] || 0.5;
+      const base = sp.shadow;
       const s = a.size * base * (1 - h / 7);
       M.compose(V.set(a.x, gy + 0.03, a.z), Q.identity(), S.set(s * 1.3, 1, s));
       shadows.setMatrixAt(sp.shadowBase + a.idx, M);
@@ -612,6 +637,8 @@ export function createWildlife(ctx) {
   // ---------- main loop ----------
   let started = false;
   const ANIM_AHEAD = 95;
+  const VIEW_AHEAD = 68;
+  const VIEW_BEHIND = 32;
   const BEHIND = 38;
 
   const DBG = typeof location !== 'undefined' && location.search.includes('wilddebug'); // TEMP
@@ -653,17 +680,22 @@ export function createWildlife(ctx) {
         if (cfg.kind === 'swarm') stepGroupSwarm(sp, g, dt, focus);
         for (const a of g.members) {
           if (cfg.kind !== 'hover' && a.x > fx + ANIM_AHEAD) {
-            // parked off-screen ahead: draw once, don't simulate
-            if (!a.drawn) { draw(sp, a, time); a.drawn = true; }
+            // parked off-screen ahead: hide once, don't simulate
+            if (!a.drawn) { hideAnimal(sp, a); a.drawn = true; }
             continue;
           }
-          a.drawn = false;
           if (cfg.kind === 'walker') stepWalker(sp, a, g, dt, time, focus);
           else if (cfg.kind === 'flock') stepFlock(sp, a, g, dt, time, focus);
           else if (cfg.kind === 'soar') stepSoar(sp, a, g, dt, time, focus);
           else if (cfg.kind === 'swarm') stepSwarm(sp, a, g, dt, time);
           else if (cfg.kind === 'hover') stepHover(sp, a, g, dt, time, focus);
-          draw(sp, a, time);
+          // only pose what the camera can see
+          if (a.x < fx - VIEW_BEHIND || a.x > fx + VIEW_AHEAD) {
+            if (!a.drawn) { hideAnimal(sp, a); a.drawn = true; }
+          } else {
+            a.drawn = false;
+            draw(sp, a, time);
+          }
         }
       }
       for (const b of sp.bones) b.mesh.instanceMatrix.needsUpdate = true;
@@ -685,6 +717,7 @@ export function createWildlife(ctx) {
     species.length = 0;
   }
 
-  if (DBG) window.__wild = { species, ctx }; // TEMP
-  return { update, dispose, group: root };
+  if (DBG) window.__wild = { species, ctx, ms: 0, n: 0, update }; // TEMP
+  const upd = DBG ? (dt, t, f) => { const t0 = performance.now(); update(dt, t, f); window.__wild.ms += performance.now() - t0; window.__wild.n++; } : update; // TEMP
+  return { update: upd, dispose, group: root };
 }

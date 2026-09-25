@@ -58,6 +58,8 @@ export const ITEM_INFO = {
   magnet: { label: 'MAGNET', color: '#ff2d95' },
   rocket: { label: 'ROCKET', color: '#ff8a00' },
   star: { label: 'ABILITY +50%', color: '#b388ff' },
+  ring: { label: 'RING! +5◉', color: '#ff2d95' },
+  boost: { label: 'BOOST!', color: '#ff9a3c' },
 };
 
 // Race payout: place bonus + tricks + whatever you grabbed.
@@ -66,9 +68,13 @@ export function payout({ place, coins, flips, perfects, crashes }) {
   return Math.max(0, placeBonus + coins * 10 + flips * 60 + perfects * 8 - crashes * 10);
 }
 
+// ---------- championship cup ----------
+export const CUP = { worlds: ['stadium', 'canyon', 'alpine', 'neon', 'volcano'], points: [10, 6, 4, 2], prize: [1000, 500, 250, 100] };
+export const newCup = () => ({ round: 0, points: { YOU: 0, BLU: 0, GRN: 0, ORG: 0 }, results: [] });
+
 // ---------- save file ----------
 const KEY = 'redline-mx.save.v1';
-const fresh = () => ({ coins: 0, owned: ['dirt'], bike: 'dirt', biome: 'stadium', upgrades: {}, best: {}, races: 0 });
+const fresh = () => ({ coins: 0, owned: ['dirt'], bike: 'dirt', biome: 'stadium', upgrades: {}, best: {}, races: 0, cup: null, trophies: 0 });
 
 export function loadSave() {
   try {

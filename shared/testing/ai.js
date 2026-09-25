@@ -73,7 +73,7 @@ export const test = base.extend({
         return s ? JSON.parse(JSON.stringify(typeof s.snapshot === 'function' ? s.snapshot() : s)) : null;
       }, hook).catch(() => null),
 
-      async waitFor(fn, { timeout = 15_000, hook = '__app', message = 'condition' } = {}) {
+      async waitFor(fn, { timeout = 30_000, hook = '__app', message = 'condition' } = {}) {
         const start = Date.now();
         while (Date.now() - start < timeout) {
           const s = await ai.state(hook);

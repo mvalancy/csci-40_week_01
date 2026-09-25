@@ -18,7 +18,7 @@ mkdirSync('test-results', { recursive: true });
 for (let round = 1; ; round++) {
   for (const app of pickApps()) {
     const started = Date.now();
-    const r = spawnSync('node', ['scripts/test.js', 'show', app, ...(right ? ['--right'] : [])], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+    const r = spawnSync('node', ['scripts/test.js', 'show', app, ...(right ? ['--right'] : [])], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, OUT_TAG: 'loop' } });
     process.stdout.write(r.stdout);
     const passed = r.stdout.match(/(\d+) passed/)?.[1] ?? 0;
     const failed = r.stdout.match(/(\d+) failed/)?.[1] ?? 0;

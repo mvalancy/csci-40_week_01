@@ -119,6 +119,15 @@ export function buildWorld(scene, track, biome) {
     g.fill();
   });
   const coolMat = new THREE.MeshBasicMaterial({ map: chevron, transparent: true, color: '#9ff' });
+  const boostMat = new THREE.MeshBasicMaterial({ map: chevron, transparent: true, color: '#ff9a3c' });
+  for (const c of track.boosts || []) {
+    for (let k = 0; k < 3; k++) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), boostMat);
+      p.rotation.x = -Math.PI / 2;
+      p.position.set(c.x - 2 + k * 1.6, track.height(c.x) + 0.04, LANES[c.lane]);
+      scene.add(p);
+    }
+  }
   for (const c of track.coolers) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.4), coolMat);
     p.rotation.x = -Math.PI / 2;

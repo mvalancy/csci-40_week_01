@@ -6,7 +6,8 @@ const SHOW = !!process.env.SHOW;
 // APP=<slug> scopes the run to apps/<slug>/ and gives it its own output
 // folders, so several agents can test different apps at the same time.
 const APP = process.env.APP;
-const out = APP || '_all';
+// OUT_TAG keeps parallel runs of the same app (e.g. the loop + a manual run) from sharing folders.
+const out = (APP || '_all') + (process.env.OUT_TAG ? `-${process.env.OUT_TAG}` : '');
 // Headed windows get half the screen each: Claude on the LEFT (default),
 // Codex / a second agent on the RIGHT with SIDE=right.
 const SCREEN_W = +(process.env.SCREEN_W || 1920);

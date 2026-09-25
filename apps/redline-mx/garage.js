@@ -2,11 +2,11 @@
 // spend coins on upgrades. Pure DOM; every button has a data-* hook
 // so tests (and players) can click it.
 import { BIOMES } from './biomes.js';
-import { BIKES, UPGRADES, MAX_LEVEL, upgradePrice, upgradeLevels, statsFor, writeSave } from './progression.js';
+import { BIKES, UPGRADES, MAX_LEVEL, CUP, newCup, upgradePrice, upgradeLevels, statsFor, writeSave } from './progression.js';
 
 const bar = (v, max) => `<span class="sbar"><i style="width:${Math.min(100, (v / max) * 100)}%"></i></span>`;
 
-export function createGarage(el, save, { onRace }) {
+export function createGarage(el, save, { onRace, onCup }) {
   const buy = (cost) => {
     if (save.coins < cost) return false;
     save.coins -= cost;
@@ -22,6 +22,16 @@ export function createGarage(el, save, { onRace }) {
         <h2>GARAGE</h2>
         <div class="coins" id="coins">◉ ${save.coins.toLocaleString()}</div>
       </div>
+      <section class="cup">
+        <div>
+          <h3>🏆 CHAMPIONSHIP CUP ${save.trophies ? `<span class="troph">${'🏆'.repeat(Math.min(save.trophies, 5))}</span>` : ''}</h3>
+          <p>All five worlds back to back. ${CUP.points.join(' / ')} points per place, ◉ ${CUP.prize[0]} for the champion.</p>
+        </div>
+        ${save.cup
+          ? `<div class="cup-live">Round ${save.cup.round + 1}/5 · you ${save.cup.points.YOU} pts
+               <button id="cup-continue">CONTINUE CUP ▶</button><button id="cup-quit" class="ghost">quit</button></div>`
+          : `<button id="cup-start">START CUP ▶</button>`}
+      </section>
       <section>
         <h3>WORLD</h3>
         <div class="g-row worlds">
@@ -98,6 +108,19 @@ export function createGarage(el, save, { onRace }) {
     } else if (t.id === 'race-btn') {
       onRace();
       return;
+    } else if (t.id === 'cup-start') {
+      save.cup = newCup();
+      save.biome = CUP.worlds[0];
+      writeSave(save);
+      onCup();
+      return;
+    } else if (t.id === 'cup-continue') {
+      save.biome = CUP.worlds[save.cup.round];
+      writeSave(save);
+      onCup();
+      return;
+    } else if (t.id === 'cup-quit') {
+      save.cup = null;
     }
     writeSave(save);
     render();

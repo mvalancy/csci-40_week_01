@@ -54,6 +54,15 @@ function makeMesh(kind) {
       g.add(body, nose);
       return g;
     }
+    case 'ring': {
+      const g = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.16, 10, 40), glow('#ff2d95', { emissiveIntensity: 1.4 }));
+      ring.rotation.y = Math.PI / 2; // hoop faces the rider
+      const inner = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.05, 6, 40), glow('#ffcf40', { emissiveIntensity: 1.2 }));
+      inner.rotation.y = Math.PI / 2;
+      g.add(ring, inner);
+      return g;
+    }
     case 'star': {
       const g = new THREE.Group();
       g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.55), glow('#b388ff', { emissiveIntensity: 1.2 })));
@@ -89,6 +98,12 @@ export function createItems(ctx) {
       const arc = Math.sin((i / 5) * Math.PI) * 3.5;
       add('coin', x, lane, r.h + 1.5 + arc - track.height(x));
     }
+  }
+  // Stunt rings hanging in the air past big ramps: fly through for a bonus.
+  for (const r of track.ramps) {
+    if (r.h < 3.2) continue;
+    const x = r.x0 + r.up + r.top + 9;
+    add('ring', x, Math.floor(rng() * 4), r.h + 3.2 - track.height(x));
   }
   // Power-ups, spread out.
   for (let x = START_X + 70; x < FINISH_X - 40; x += 55 + rng() * 45) {
@@ -130,8 +145,12 @@ export function createItems(ctx) {
           z += (rider.z - z) * it.pull;
         }
         it.mesh.position.set(x, y, z);
-        it.mesh.rotation.y = time * 3 + it.x;
-        const near = Math.abs(x - rider.x) < 1.4 && Math.abs(z - rider.z) < 1.3 && Math.abs(y - (rider.y + 1)) < 1.8;
+        const ring = it.kind === 'ring';
+        if (ring) it.mesh.rotation.x = Math.sin(time * 2 + it.x) * 0.15;
+        else it.mesh.rotation.y = time * 3 + it.x;
+        const near = ring
+          ? Math.abs(x - rider.x) < 1.2 && Math.hypot(z - rider.z, y - (rider.y + 1)) < 2.1
+          : Math.abs(x - rider.x) < 1.4 && Math.abs(z - rider.z) < 1.3 && Math.abs(y - (rider.y + 1)) < 1.8;
         if (near && !rider.crashed) {
           it.taken = true;
           it.mesh.visible = false;

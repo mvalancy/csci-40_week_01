@@ -76,6 +76,58 @@ const riders = ROSTER.map((r, i) => {
   return rider;
 });
 const player = riders[0];
+
+// Floating name tags over the rivals.
+function nameTag(text, color) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(0,0,0,0.55)';
+  g.beginPath(); g.roundRect(8, 8, 240, 48, 24); g.fill();
+  g.fillStyle = color; g.font = 'italic 900 34px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(2.4, 0.6, 1);
+  sp.renderOrder = 10;
+  return sp;
+}
+const RIVAL_NAMES = { BLU: 'BLAZE', GRN: 'VIPER', ORG: 'NOVA' };
+for (const r of riders.slice(1)) {
+  r.tag = nameTag(RIVAL_NAMES[r.name] || r.name, r.color);
+  scene.add(r.tag);
+}
+
+// ---------- ghost of your best run in this world ----------
+const GHOST_KEY = `redline-mx.ghost.${biome.id}`;
+const GHOST_DT = 0.05;
+let ghostRun = null; // [x, y, z, pitch] samples every GHOST_DT
+try { ghostRun = JSON.parse(localStorage.getItem(GHOST_KEY) || 'null'); } catch {}
+let recording = [];
+let recordClock = 0;
+const ghost = buildBike(playerBike.id, '#bfe9ff', 'G');
+ghost.root.traverse((o) => {
+  if (!o.isMesh) return;
+  o.castShadow = false;
+  o.material = o.material.clone();
+  o.material.transparent = true;
+  o.material.opacity = 0.28;
+  o.material.depthWrite = false;
+});
+ghost.root.visible = false;
+scene.add(ghost.root);
+function updateGhost() {
+  if (!ghostRun || state === 'title' || state === 'garage') { ghost.root.visible = false; return; }
+  const f = raceTime / GHOST_DT;
+  const i = Math.min(Math.floor(f), ghostRun.length / 4 - 2);
+  if (i < 0) return;
+  const k = Math.min(1, f - i);
+  const at = (j, o) => ghostRun[j * 4 + o] + (ghostRun[(j + 1) * 4 + o] - ghostRun[j * 4 + o]) * k;
+  ghost.root.visible = true;
+  ghost.root.position.set(at(i, 0), at(i, 1), at(i, 2));
+  ghost.root.rotation.z = at(i, 3);
+}
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 // Effect visuals on the player bike.
@@ -266,6 +318,9 @@ function startRace() {
   });
   player.shields = playerBike.stats.shields || 0;
   items.reset();
+  recording = [];
+  recordClock = 0;
+  try { ghostRun = JSON.parse(localStorage.getItem(GHOST_KEY) || 'null'); } catch {}
   raceCoins = 0;
   ability = 0;
   abilityUses = 0;
@@ -312,7 +367,10 @@ function finishRace() {
   placeNow = standings().indexOf(player) + 1;
   const prev = save.best[biome.id];
   newRecord = !prev || player.finishTime < prev;
-  if (newRecord) save.best[biome.id] = player.finishTime;
+  if (newRecord) {
+    save.best[biome.id] = player.finishTime;
+    try { localStorage.setItem(GHOST_KEY, JSON.stringify(recording)); } catch {}
+  }
   lastPayout = payout({ place: placeNow, coins: raceCoins, flips: player.flips, perfects: player.perfects, crashes: player.crashes });
   if (save.cup && CUP.worlds[save.cup.round] === biome.id) {
     // Rivals that haven't finished yet are placed by distance.
@@ -420,6 +478,13 @@ function simulate(dt) {
   }
   if (state !== 'racing' && state !== 'finished') return;
   raceTime += dt;
+  if (state === 'racing') {
+    recordClock += dt;
+    while (recordClock >= GHOST_DT) {
+      recordClock -= GHOST_DT;
+      recording.push(+player.x.toFixed(2), +player.y.toFixed(2), +player.z.toFixed(2), +wrap(player.pitch).toFixed(3));
+    }
+  }
   env.weatherGrip = weather.grip ?? 1;
   env.wind = weather.wind ?? 0;
 
@@ -512,6 +577,11 @@ function frame(now) {
   const t = timer.getElapsed();
 
   renderRiders(dt, t);
+  updateGhost();
+  for (const r of riders.slice(1)) {
+    r.tag.position.set(r.x, r.y + 3.4, r.z);
+    r.tag.visible = state !== 'title' && state !== 'garage';
+  }
   world.updateDust(dt);
   world.updateConfetti(dt);
   if (state === 'title' || state === 'garage') items.update(dt, t, { x: START_X, y: 0, z: 99, has: () => false, crashed: true });
@@ -580,6 +650,7 @@ const app = (window.__app = {
       cup: save.cup ? { round: save.cup.round, points: { ...save.cup.points } } : null,
       trophies: save.trophies,
       music: { playing: music.playing, bpm: music.bpm },
+      ghost: { loaded: !!ghostRun, visible: ghost.root.visible, x: ghost.root.position.x, samples: recording.length / 4 },
       ability,
       abilityUses,
       env: { ...env },

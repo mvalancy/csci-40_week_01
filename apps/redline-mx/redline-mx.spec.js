@@ -255,6 +255,11 @@ test.describe('REDLINE MX', () => {
       await ai.check('back to countdown', s.state, (v) => v === 'countdown');
       await ai.check('player reset to the start', s.player.x, (x) => x < 20);
     });
+    await ai.step('your record run comes back as a ghost', async () => {
+      const s = await ai.waitFor((s) => s.state === 'racing' && s.ghost.visible && s.ghost.x > 30, { message: 'ghost riding' });
+      await ai.check('ghost loaded from the record', s.ghost.loaded, (g) => g === true);
+      await ai.snap('ghost');
+    });
   });
 
   test('9 · full race driven by Claude with the keyboard', async ({ page, ai }) => {

@@ -2,11 +2,13 @@
 // spend coins on upgrades. Pure DOM; every button has a data-* hook
 // so tests (and players) can click it.
 import { BIOMES } from './biomes.js';
+import { createBikePreview } from './garage-preview.js';
 import { BIKES, UPGRADES, MAX_LEVEL, CUP, newCup, upgradePrice, upgradeLevels, statsFor, writeSave } from './progression.js';
 
 const bar = (v, max) => `<span class="sbar"><i style="width:${Math.min(100, (v / max) * 100)}%"></i></span>`;
 
 export function createGarage(el, save, { onRace, onCup }) {
+  const preview = createBikePreview();
   const buy = (cost) => {
     if (save.coins < cost) return false;
     save.coins -= cost;
@@ -59,6 +61,7 @@ export function createGarage(el, save, { onRace, onCup }) {
       <section class="g-split">
         <div>
           <h3>${bike.name.toUpperCase()} · STATS</h3>
+          <div id="g-preview-slot"></div>
           <div class="stats-grid">
             <span>Top speed</span>${bar(s.maxSpeed - 25, 20)}
             <span>Turbo</span>${bar(s.turboSpeed - 35, 25)}
@@ -84,6 +87,9 @@ export function createGarage(el, save, { onRace, onCup }) {
         </div>
       </section>
       <button id="race-btn" class="race-btn">RACE ▶ <small>ENTER</small></button>`;
+    // The preview canvas survives re-renders: just move it into the new slot.
+    el.querySelector('#g-preview-slot').appendChild(preview.canvas);
+    preview.setBike(save.bike);
   }
 
   el.addEventListener('click', (e) => {

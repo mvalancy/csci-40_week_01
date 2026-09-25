@@ -70,6 +70,10 @@ test.describe('REDLINE MX', () => {
       if (s.state === 'countdown') await ai.check('no false start', s.player.speed, (v) => v === 0);
       await ai.waitFor((s) => s.state === 'racing', { timeout: 60_000, message: 'GO!' });
     });
+    await ai.step('the world soundtrack is playing', async () => {
+      const s = await ai.waitFor((s) => s.music.playing, { message: 'music' });
+      await ai.check(`music at ${s.music.bpm} bpm`, s.music.bpm, (b) => b > 100);
+    });
     await ai.step('Z throttle accelerates', async () => {
       const s = await ai.waitFor((s) => s.player.speed > 20, { message: 'speed > 20' });
       await ai.check('speed (units/s)', s.player.speed, (v) => v > 20);

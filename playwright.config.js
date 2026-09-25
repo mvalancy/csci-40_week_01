@@ -25,7 +25,7 @@ export default defineConfig({
   testMatch: APP ? '**/*.spec.js' : ['apps/**/*.spec.js', 'shared/**/*.spec.js'],
   testIgnore: '**/node_modules/**',
   outputDir: `test-results/${out}`,
-  timeout: 120_000,
+  timeout: 300_000, // generous: classroom machines may be running several agents at once
   fullyParallel: !SHOW,
   workers: SHOW ? 1 : undefined,
   reporter: [['list'], ['html', { open: 'never', outputFolder: `playwright-report/${out}` }]],

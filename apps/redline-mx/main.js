@@ -11,6 +11,7 @@ import { buildBike, WHEEL_R, WHEELBASE } from './bikes.js';
 import { Rider } from './rider.js';
 import { createItems } from './items.js';
 import { createAudio } from './audio.js';
+import { createMusic } from './music.js';
 import { setupTouch } from './touch.js';
 import { createGarage } from './garage.js';
 import { BIKES, ITEM_INFO, CUP, bikeById, statsFor, loadSave, writeSave, payout } from './progression.js';
@@ -52,6 +53,7 @@ const modules = [
 const items = createItems(ctx);
 const focus = { x: 0, y: 0, z: 0, speed: 0, airborne: false, excitement: 0, riders: [], cameraX: 0 };
 const audio = createAudio();
+const music = createMusic(biome.id);
 
 // Shared by every rider; weather writes grip & wind into it each frame.
 const env = { gravity: biome.physics.gravity, heatMul: biome.physics.heat, patch: biome.patch, weatherGrip: 1, wind: 0 };
@@ -96,6 +98,7 @@ let autopilot = false;
 addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   audio.start();
+  if ((state === 'racing' || state === 'countdown') && !music.playing) music.start();
   if (e.repeat) return;
   const k = e.key.toLowerCase();
   keys.add(k);
@@ -111,7 +114,7 @@ addEventListener('keydown', (e) => {
     autopilot = !autopilot;
     callout(autopilot ? 'AUTOPILOT' : 'MANUAL', 'blue', 900);
   }
-  if (k === 'm') audio.toggleMute();
+  if (k === 'm') { audio.toggleMute(); music.setMuted(audio.muted); }
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
@@ -237,6 +240,7 @@ function nextCupRound() {
 
 function openGarage() {
   state = 'garage';
+  music.stop();
   $('title').hidden = true;
   $('results').hidden = true;
   hud.root.hidden = true;
@@ -273,6 +277,7 @@ function startRace() {
   $('results').hidden = true;
   garage.hide();
   hud.root.hidden = false;
+  music.start();
   callout('3', 'gold', 700);
   audio.beep(false);
 }
@@ -537,6 +542,7 @@ function frame(now) {
 
   if (state !== 'title' && state !== 'garage') renderHUD();
   audio.engine(player.speed, player.turbo, state === 'racing' || state === 'countdown');
+  music.setIntensity(player.turbo || player.airborne || player.has('nitro') ? 1 : player.speed / 60);
   renderer.render(scene, camera);
   app.frames += 1;
 }
@@ -573,6 +579,7 @@ const app = (window.__app = {
       lastPayout,
       cup: save.cup ? { round: save.cup.round, points: { ...save.cup.points } } : null,
       trophies: save.trophies,
+      music: { playing: music.playing, bpm: music.bpm },
       ability,
       abilityUses,
       env: { ...env },

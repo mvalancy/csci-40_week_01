@@ -1,11 +1,14 @@
 // Tiny WebAudio synth: a buzzy engine whose pitch follows speed, plus
 // noise bursts for crashes and a blip for perfect landings. M mutes.
+import { getContext } from 'tone';
+
+// Shares Tone.js's AudioContext with the music (one audio device, not two).
 export function createAudio() {
   let ctx, engine, filter, gain, muted = false;
 
   const start = () => {
     if (ctx) return;
-    ctx = new AudioContext();
+    ctx = getContext().rawContext;
     engine = ctx.createOscillator();
     engine.type = 'sawtooth';
     filter = ctx.createBiquadFilter();

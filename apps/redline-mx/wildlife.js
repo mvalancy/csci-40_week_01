@@ -2,49 +2,49 @@
 // bones (see wildlife-rigs.js) drawn with one InstancedMesh per bone, so a
 // whole flock is a handful of draw calls. Animals live in groups that spawn in
 // a window around the player and are recycled ahead of it as it advances.
-// Ground critters stay off the track (far side z < -8.6, foreground z > 9.3);
+// Ground critters stay off the track (far side z < -9, foreground z > 9.6);
 // only things in the air may cross over it.
 import * as THREE from 'three';
 import { mulberry32 } from './rng.js';
 import { RIGS, buildBoneGeometry, rockGeometry } from './wildlife-rigs.js';
 
 const TAU = Math.PI * 2;
-const FAR_Z = -8.6; // far-side ground critters stay below this z
-const NEAR_Z = 9.3; // foreground ground critters stay above this z
+const FAR_Z = -9.0; // far-side ground critters stay below this z
+const NEAR_Z = 9.6; // foreground ground critters stay above this z
 const WORLD_MIN = -60;
 const WORLD_MAX = 1260;
 const GRAV = 16;
 
 // Species tuning. kind: walker | flock | soar | hover | swarm
 const CFG = {
-  pigeon: { kind: 'flock', groups: 4, per: 8, size: 2.1, far: [-9, -10.8], near: [9.8, 12.5], nearP: 0.6, spread: [3.2, 1.6],
+  pigeon: { kind: 'flock', groups: 5, per: 7, size: 2.1, far: [-9, -10.8], near: [9.8, 11.6], nearP: 0.6, spread: [3.2, 1.6],
     tints: ['#9aa3b0', '#b8bec8', '#7d8694', '#d8d2c8', '#6f7580', '#a89a90'], fear: 15, flapRate: 26, cruise: [9, 14] },
-  dog: { kind: 'walker', special: 'dog', groups: 3, per: 1, size: 1.45, far: [-9, -10.6], near: [10, 12], nearP: 0.85,
+  dog: { kind: 'walker', special: 'dog', groups: 4, per: 1, size: 1.45, far: [-9, -10.6], near: [10, 11.6], nearP: 0.85,
     tints: ['#c8924f', '#f2ede4', '#6b4a33', '#d9b27a', '#4a403a'], walk: 1.6, run: 13, fear: 0 },
-  vulture: { kind: 'soar', groups: 2, per: 3, size: 2.3, far: [-13, -22], y: [9.5, 12.5], radius: [4, 8], omega: 0.5 },
-  roadrunner: { kind: 'walker', special: 'roadrunner', groups: 3, per: 1, size: 1.9, far: [-9, -10.8], near: [10, 12], nearP: 0.6,
+  vulture: { kind: 'soar', groups: 3, per: 3, size: 2.3, far: [-13, -22], y: [9.5, 12.5], radius: [4, 8], omega: 0.5 },
+  roadrunner: { kind: 'walker', special: 'roadrunner', groups: 5, per: 1, size: 1.9, far: [-9, -10.8], near: [10, 11.6], nearP: 0.6,
     walk: 1.6, run: 22, fear: 17 },
-  lizard: { kind: 'walker', special: 'lizard', groups: 4, per: 1, size: 2.2, far: [-9.4, -10.8], near: [10.2, 12.5], nearP: 0.55, perch: [1.1, 1.6],
+  lizard: { kind: 'walker', special: 'lizard', groups: 6, per: 1, size: 2.2, far: [-9.4, -10.8], near: [10.2, 11.8], nearP: 0.55, perch: [1.1, 1.6],
     tints: ['#6fae4a', '#c9a24a', '#4f8fb0', '#b8643a'], walk: 2.5, run: 9, fear: 14, rock: '#a86a3c' },
   camel: { kind: 'walker', special: 'camel', groups: 2, per: 2, size: 1.3, far: [-9.6, -10.6], near: [12.5, 14], nearP: 1, spread: [7, 1], walk: 1.3, run: 2, fear: 0 },
-  goat: { kind: 'walker', special: 'goat', groups: 3, per: 2, size: 1.5, far: [-9.6, -10.8], near: [10.5, 12.5], nearP: 0.45, spread: [5, 1], perch: [1.3, 2.2],
+  goat: { kind: 'walker', special: 'goat', groups: 4, per: 2, size: 1.5, far: [-9.6, -10.8], near: [10.4, 11.8], nearP: 0.45, spread: [5, 1], perch: [1.3, 2.2],
     walk: 1.1, run: 7, fear: 16, rock: '#8a8e98', hopV: 6 },
-  eagle: { kind: 'soar', groups: 2, per: 1, size: 2.5, far: [-11, -20], y: [9, 12], radius: [6, 10], omega: 0.45 },
-  penguin: { kind: 'walker', special: 'penguin', groups: 3, per: 4, size: 1.4, far: [-9, -10.8], near: [10, 12.5], nearP: 0.6,
+  eagle: { kind: 'soar', groups: 3, per: 1, size: 2.5, far: [-11, -20], y: [9, 12], radius: [6, 10], omega: 0.45 },
+  penguin: { kind: 'walker', special: 'penguin', groups: 4, per: 4, size: 1.4, far: [-9, -10.8], near: [10, 11.6], nearP: 0.6,
     spread: [2.6, 1.4], walk: 0.9, run: 8, fear: 15 },
-  rabbit: { kind: 'walker', loco: 'hop', groups: 4, per: 1, size: 1.8, far: [-9, -10.8], near: [10, 12.5], nearP: 0.65,
+  rabbit: { kind: 'walker', loco: 'hop', groups: 6, per: 1, size: 1.8, far: [-9, -10.8], near: [10, 11.6], nearP: 0.65,
     tints: ['#ffffff', '#f4f1ea', '#e8e4dc'], walk: 2.5, run: 9, fear: 15, hopV: 4, fleeHopV: 5.5 },
   drone: { kind: 'hover', groups: 3, per: 1, size: 2.6 },
-  cat: { kind: 'walker', special: 'cat', groups: 4, per: 1, size: 1.6, far: [-9, -10.8], near: [10, 12], nearP: 0.55,
+  cat: { kind: 'walker', special: 'cat', groups: 6, per: 1, size: 1.6, far: [-9, -10.8], near: [10, 11.6], nearP: 0.55,
     tints: ['#2a2a33', '#e08a3a', '#8c8c96', '#f0ece4', '#5a4a3a'], walk: 1.2, run: 10, fear: 15 },
   bat: { kind: 'swarm', groups: 2, per: 10, size: 2.3, far: [-2, -6], y: [6, 8.5], amp: [3.2, 1.2, 2.2], freq: [1.6, 3.2], flapRate: 24, drift: 3, fear: 16 },
-  parrot: { kind: 'flock', groups: 3, per: 7, size: 2.0, far: [-9, -10.8], near: [9.8, 12.5], nearP: 0.55, spread: [3, 1.4],
+  parrot: { kind: 'flock', groups: 4, per: 6, size: 2.0, far: [-9, -10.8], near: [9.8, 11.6], nearP: 0.55, spread: [3, 1.4],
     tints: ['#e8322a', '#2a7de8', '#2fc24a', '#f5c21b', '#ff7a1a', '#19c2c2'], fear: 16, flapRate: 22, cruise: [8, 13] },
-  monkey: { kind: 'walker', special: 'monkey', loco: 'hop', groups: 4, per: 1, size: 1.7, far: [-9, -10.8], near: [10, 12], nearP: 0.45,
+  monkey: { kind: 'walker', special: 'monkey', loco: 'hop', groups: 6, per: 1, size: 1.7, far: [-9, -10.8], near: [10, 11.6], nearP: 0.45,
     walk: 3, run: 8, fear: 16, hopV: 6.5, fleeHopV: 8 },
-  frog: { kind: 'walker', loco: 'hop', groups: 4, per: 2, size: 2.2, far: [-9, -10.8], near: [10, 12.5], nearP: 0.75, spread: [1.6, 0.8],
-    tints: ['#4fbf3a', '#8fd14a', '#2f9a55', '#e0d03a'], walk: 2, run: 5.5, fear: 13, hopV: 3.5, fleeHopV: 5 },
-  butterfly: { kind: 'swarm', groups: 3, per: 7, size: 2.0, far: [-9.4, -11], near: [10, 12.5], nearP: 0.6, y: [1.6, 3.2],
+  frog: { kind: 'walker', loco: 'hop', groups: 5, per: 2, size: 2.0, far: [-9, -10.8], near: [10, 11.6], nearP: 0.75, spread: [1.6, 0.8],
+    tints: ['#4fbf3a', '#8fd14a', '#2f9a55', '#3a9ad8'], walk: 2, run: 5.5, fear: 13, hopV: 3.5, fleeHopV: 5 },
+  butterfly: { kind: 'swarm', groups: 4, per: 6, size: 2.0, far: [-9.4, -11], near: [10, 11.6], nearP: 0.6, y: [1.6, 3.2],
     amp: [1.3, 0.7, 0.8], freq: [0.5, 1.2], flapRate: 16, drift: 0.6, fear: 14, lowFlyer: true,
     tints: ['#ff8a1a', '#3ac8ff', '#ffe040', '#ff5ab0', '#b070ff', '#f4f4f4'] },
 };
@@ -58,7 +58,6 @@ const angLerp = (a, b, k) => {
 };
 
 export function createWildlife(ctx) {
-  if (typeof location !== 'undefined' && location.search.includes('nowild')) return { update() {}, dispose() {} }; // TEMP
   const { scene, biome } = ctx;
   const R = mulberry32(((ctx.rng ? ctx.rng() : 0.5) * 1e9) | 0);
   const rr = (a, b) => a + (b - a) * R();
@@ -93,8 +92,7 @@ export function createWildlife(ctx) {
   // ---------- species setup ----------
   const species = [];
   let totalAnimals = 0;
-  const DBGLIST = typeof location !== 'undefined' && new URLSearchParams(location.search).get('wildlist'); // TEMP
-  for (const id of DBGLIST ? DBGLIST.split(',') : biome.wildlife || []) {
+  for (const id of biome.wildlife || []) {
     const cfg = CFG[id];
     const rig = RIGS[id];
     if (!cfg || !rig) continue;
@@ -246,6 +244,8 @@ export function createWildlife(ctx) {
 
   // ---------- threat ----------
   const threat = { d: 1e9, x: 0, z: 0, speed: 0, dx: 0 };
+  // Faster bikes are noticed from further away, so the scatter happens on screen.
+  let fearBoost = 0;
   function nearestRider(x, z, focus) {
     threat.d = 1e9;
     const list = focus.riders && focus.riders.length ? focus.riders : [focus];
@@ -302,7 +302,7 @@ export function createWildlife(ctx) {
         a.state = 'chase'; a.timer = rr(2.2, 3.4); a.sit = 0; a.cool = 9;
         a.chaseSpeed = clamp((focus.speed || 10) * 0.75, 8, 20);
       }
-    } else if (cfg.fear && th.d < cfg.fear && a.calm <= 0 && a.state !== 'flee' && a.state !== 'slide') {
+    } else if (cfg.fear && th.d < cfg.fear + fearBoost && a.calm <= 0 && a.state !== 'flee' && a.state !== 'slide') {
       startFlee(sp, a, g, th);
     } else if (g.scared && a.state !== 'flee' && a.state !== 'slide' && a.calm <= 0 && cfg.per > 1 && a.delay < 0) {
       a.delay = rr(0.05, 0.4);
@@ -453,7 +453,7 @@ export function createWildlife(ctx) {
     a.timer -= dt;
     if (a.state !== 'fly') {
       const th = nearestRider(a.x, a.z, focus);
-      if (th.d < cfg.fear) g.scared = true;
+      if (th.d < cfg.fear + fearBoost) g.scared = true;
       if (g.scared && a.delay < 0) { a.delay = rr(0, 0.35); a.fleeDir = Math.sign(-th.dx) || 1; }
       if (a.delay >= 0) {
         a.delay -= dt;
@@ -543,6 +543,7 @@ export function createWildlife(ctx) {
     const nx = g.cx + (Math.sin(tt * a.f[0] + a.ph[0]) + 0.4 * Math.sin(tt * a.f[1] * 2.3 + a.ph[1])) * ax * k;
     let ny = g.cy + Math.sin(tt * a.f[1] + a.ph[1]) * ay * k + g.scatter * 3 * (0.5 + (a.k % 3) * 0.3);
     let nz = g.cz + Math.sin(tt * a.f[2] + a.ph[2]) * az * k + g.scatter * g.side * 2;
+    if (!cfg.lowFlyer) ny = Math.max(ny, 4.4); // stay well above the riders' heads
     if (cfg.lowFlyer) {
       ny = Math.max(0.4, ny);
       if (ny < 4.5) nz = g.side > 0 ? Math.max(nz, NEAR_Z) : Math.min(nz, FAR_Z);
@@ -560,7 +561,7 @@ export function createWildlife(ctx) {
     const { cfg } = sp;
     g.cx += dt * cfg.drift;
     const th = nearestRider(g.cx, g.cz, focus);
-    if (th.d < cfg.fear) g.scatter = Math.min(1, g.scatter + dt * 4);
+    if (th.d < cfg.fear + fearBoost) g.scatter = Math.min(1, g.scatter + dt * 4);
     else g.scatter = Math.max(0, g.scatter - dt * 0.3);
   }
 
@@ -641,11 +642,10 @@ export function createWildlife(ctx) {
   const VIEW_BEHIND = 32;
   const BEHIND = 38;
 
-  const DBG = typeof location !== 'undefined' && location.search.includes('wilddebug'); // TEMP
   function initAll(fx) {
     for (const sp of species) {
       const n = sp.groups.length;
-      sp.groups.forEach((g, i) => spawnGroup(sp, g, DBG ? fx + 2 + ((i + 0.5) / n) * 36 : fx - 25 + ((i + 0.2 + R() * 0.6) / n) * 150));
+      sp.groups.forEach((g, i) => spawnGroup(sp, g, fx - 25 + ((i + 0.2 + R() * 0.6) / n) * 150));
     }
   }
 
@@ -653,6 +653,7 @@ export function createWildlife(ctx) {
     if (!species.length) return;
     dt = dt > 0 ? Math.min(dt, 0.05) : 0; // the game clock can hiccup backwards
     const fx = focus.x || 0;
+    fearBoost = Math.min(12, Math.max(0, (focus.speed || 0) * 0.25));
     if (!started) { started = true; initAll(fx); }
     for (const sp of species) {
       const { cfg } = sp;
@@ -666,13 +667,13 @@ export function createWildlife(ctx) {
             if (!(a.hidden || a.x < fx - BEHIND || a.x > fx + 220 || a.y > 40 || a.z < -70 || a.z > 40)) { gone = false; break; }
           }
           if (g.dormant) {
-            const x = fx + rr(50, 120);
+            const x = fx + rr(48, 110);
             if (x < WORLD_MAX - 8) spawnGroup(sp, g, x);
             continue;
           }
           if (gone) {
             const jumpedBack = g.members.some((a) => a.x > fx + 220) || (anchor != null && anchor > fx + 220);
-            spawnGroup(sp, g, jumpedBack ? fx + rr(-20, 130) : fx + rr(50, 130));
+            spawnGroup(sp, g, jumpedBack ? fx + rr(-20, 110) : fx + rr(48, 110));
             if (g.dormant) continue;
           }
         }
@@ -717,7 +718,5 @@ export function createWildlife(ctx) {
     species.length = 0;
   }
 
-  if (DBG) window.__wild = { species, ctx, ms: 0, n: 0, update }; // TEMP
-  const upd = DBG ? (dt, t, f) => { const t0 = performance.now(); update(dt, t, f); window.__wild.ms += performance.now() - t0; window.__wild.n++; } : update; // TEMP
-  return { update: upd, dispose, group: root };
+  return { update, dispose, group: root };
 }

@@ -112,3 +112,14 @@ test('navigation reaches ground objectives around cargo and uses freeway ramp fo
   assert.equal(descent[0].y,0);
   assert.deepEqual(descent.at(-1),{x:-65,y:0,z:175});
 });
+
+test('cover ray slabs keep parallel, grazing and zero-length behavior after optimization', () => {
+  const hit=world.segmentHit({x:-60,y:2,z:40},{x:-48,y:2,z:40});
+  assert.ok(Math.abs(hit.t-.75)<1e-12);
+  assert.equal(world.segmentHit({x:-60,y:2,z:40},{x:-52,y:2,z:40}),null,'A short ray ends before cover');
+  assert.equal(world.segmentHit({x:-60,y:2,z:40},{x:-60,y:2,z:40}),null,'Stationary point outside cover');
+  assert.equal(world.segmentHit({x:-48,y:2,z:40},{x:-48,y:2,z:40}).t,.0001,'Stationary point inside cover');
+  const grazing=world.segmentHit({x:-51,y:2,z:30},{x:-51,y:2,z:50});
+  assert.ok(Math.abs(grazing.t-.175)<1e-12,'Parallel ray along cargo face still intersects its leading edge');
+  assert.equal(world.segmentHit({x:-51.01,y:2,z:30},{x:-51.01,y:2,z:50}),null,'Parallel ray just outside face stays clear');
+});

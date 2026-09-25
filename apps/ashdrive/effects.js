@@ -62,11 +62,27 @@ export function createEffects(THREE, scene) {
   const sparks = instancePool(384, new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
   const debris = instancePool(72, new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#697b89', metalness: .8, roughness: .5 }));
 
+  // Additive fire is order independent within its pool: one billboard draw
+  // replaces up to 24 sprites. Smoke keeps individual sprites for alpha sorting.
+  const fireBatch = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
+    map: fireMap, color: '#ffffff', transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false,
+  }), 24);
+  fireBatch.name = 'Batched additive fire billboards';
+  fireBatch.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  fireBatch.frustumCulled = false;
+  for (let i = 0; i < 24; i++) fireBatch.setColorAt(i, tint.setRGB(1, 1, 1));
+  fireBatch.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  fireBatch.count = 0; fireBatch.visible = false; root.add(fireBatch);
+  const billboard = new THREE.Quaternion(), spin = new THREE.Quaternion();
   const clouds = Array.from({ length: 48 }, (_, i) => {
     const smoke = i >= 24;
-    const material = new THREE.SpriteMaterial({ map: smoke ? smokeMap : fireMap, color: smoke ? '#8b8274' : '#ffffff', transparent: true, opacity: 0, depthWrite: false, blending: smoke ? THREE.NormalBlending : THREE.AdditiveBlending, toneMapped: false });
-    const mesh = new THREE.Sprite(material); mesh.visible = false; root.add(mesh);
-    return { mesh, life: 0, total: 1, size: 1, smoke, vx: 0, vy: 0, vz: 0 };
+    let mesh = null;
+    if (smoke) {
+      const material = new THREE.SpriteMaterial({ map: smokeMap, color: '#8b8274', transparent: true, opacity: 0, depthWrite: false, blending: THREE.NormalBlending, toneMapped: false });
+      mesh = new THREE.Sprite(material); mesh.visible = false; root.add(mesh);
+    }
+    return { mesh, position: mesh ? mesh.position : new THREE.Vector3(), rotation: 0, life: 0, total: 1, size: 1, smoke, vx: 0, vy: 0, vz: 0 };
   });
   let fireCursor = 0, smokeCursor = 24, ringCursor = 0;
   const rings = Array.from({ length: 12 }, () => {
@@ -77,11 +93,10 @@ export function createEffects(THREE, scene) {
 
   function cloud(position, size, smoke = false) {
     const p = clouds[smoke ? 24 + (smokeCursor++ % 24) : fireCursor++ % 24];
-    p.mesh.visible = true; p.mesh.position.copy(position);
-    p.mesh.material.rotation = random(0, Math.PI * 2);
-    p.mesh.material.opacity = smoke ? .45 : 1;
+    p.position.copy(position); p.rotation = random(0, Math.PI * 2);
+    if (p.mesh) { p.mesh.visible = true; p.mesh.material.rotation = p.rotation; p.mesh.material.opacity = .45; p.mesh.scale.setScalar(size * .4); }
     p.total = p.life = smoke ? random(1.4, 2.4) : random(.3, .65);
-    p.size = size; p.mesh.scale.setScalar(size * .4);
+    p.size = size;
     p.vx = random(-1, 1); p.vy = smoke ? random(1, 3) : random(.3, 1.5); p.vz = random(-1, 1);
     return p;
   }
@@ -160,16 +175,33 @@ export function createEffects(THREE, scene) {
     pool.mesh.visible = lastActive >= 0;
   }
 
-  function update(dt) {
+  function update(dt, camera) {
     animatePool(sparks, dt, 'spark'); animatePool(debris, dt, 'debris');
+    if (camera) camera.getWorldQuaternion(billboard);
+    let fireCount = 0;
     for (const p of clouds) {
       if (p.life <= 0) continue;
-      p.life = Math.max(0, p.life - dt); p.mesh.visible = p.life > 0;
+      p.life = Math.max(0, p.life - dt);
+      if (p.mesh) p.mesh.visible = p.life > 0;
       const progress = 1 - p.life / p.total;
-      p.mesh.position.x += p.vx * dt; p.mesh.position.y += p.vy * dt; p.mesh.position.z += p.vz * dt;
-      p.mesh.scale.setScalar(p.size * (.4 + progress * (p.smoke ? 1.4 : .9)));
-      p.mesh.material.opacity = (p.smoke ? .35 : 1) * (1 - progress) ** (p.smoke ? 1 : 1.8);
+      p.position.x += p.vx * dt; p.position.y += p.vy * dt; p.position.z += p.vz * dt;
+      const size = p.size * (.4 + progress * (p.smoke ? 1.4 : .9));
+      const opacity = (p.smoke ? .35 : 1) * (1 - progress) ** (p.smoke ? 1 : 1.8);
+      if (p.smoke) {
+        p.mesh.scale.setScalar(size); p.mesh.material.opacity = opacity;
+      } else if (p.life > 0) {
+        dummy.position.copy(p.position); dummy.scale.setScalar(size);
+        spin.setFromAxisAngle(forward, p.rotation);
+        dummy.quaternion.copy(billboard).multiply(spin); dummy.updateMatrix();
+        fireBatch.setMatrixAt(fireCount, dummy.matrix);
+        // With additive SrcAlpha blending, RGB*fade gives the same light
+        // contribution as the former per-sprite material opacity.
+        fireBatch.setColorAt(fireCount, tint.setRGB(opacity, opacity, opacity));
+        fireCount++;
+      }
     }
+    fireBatch.count = fireCount; fireBatch.visible = fireCount > 0;
+    if (fireCount) { fireBatch.instanceMatrix.needsUpdate = true; fireBatch.instanceColor.needsUpdate = true; }
     for (const p of rings) {
       if (p.life <= 0) continue;
       p.life = Math.max(0, p.life - dt); p.mesh.visible = p.life > 0;
@@ -186,7 +218,8 @@ export function createEffects(THREE, scene) {
       pool.mesh.instanceMatrix.needsUpdate = true;
       pool.mesh.count = 0; pool.mesh.visible = false;
     }
-    for (const p of [...clouds, ...rings]) { p.life = 0; p.mesh.visible = false; }
+    for (const p of [...clouds, ...rings]) { p.life = 0; if (p.mesh) p.mesh.visible = false; }
+    fireBatch.count = 0; fireBatch.visible = false;
   }
   return { explode, hit, trail, update, clear };
 }

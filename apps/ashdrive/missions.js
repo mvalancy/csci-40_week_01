@@ -1,3 +1,5 @@
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
 // Original procedural mission machinery. No assets or runtime network requests.
 export function createMission(THREE, scene, world) {
   const group = new THREE.Group(); group.name = 'Military data recovery mission'; scene.add(group);
@@ -10,6 +12,34 @@ export function createMission(THREE, scene, world) {
   }
   function cylinder(parent, radius, height, position, mat, segments = 12) {
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, segments), mat); mesh.position.set(...position); parent.add(mesh); return mesh;
+  }
+  // Bake only direct static siblings. Animated radar/intel groups and
+  // independently flashing indicator/beacon meshes retain their own objects.
+  function batchStatic(parent, dynamic = new Set()) {
+    const byMaterial = new Map();
+    for (const child of parent.children) {
+      if (!child.isMesh || dynamic.has(child) || child.material.transparent) continue;
+      const key = `${child.material.uuid}/${child.castShadow}/${child.receiveShadow}`;
+      if (!byMaterial.has(key)) byMaterial.set(key, []);
+      byMaterial.get(key).push(child);
+    }
+    for (const children of byMaterial.values()) {
+      if (children.length < 2) continue;
+      const parts = children.map(child => {
+        child.updateMatrix();
+        const part = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+        part.clearGroups(); part.applyMatrix4(child.matrix); return part;
+      });
+      const geometry = mergeGeometries(parts, false);
+      for (const part of parts) part.dispose();
+      if (!geometry) continue;
+      geometry.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geometry, children[0].material);
+      mesh.name = 'Batched mission machinery'; mesh.updateMatrix(); mesh.matrixAutoUpdate = false;
+      mesh.castShadow = children[0].castShadow; mesh.receiveShadow = children[0].receiveShadow;
+      for (const child of children) parent.remove(child);
+      parent.add(mesh);
+    }
   }
   const targets = world.objectives.map((point, index) => {
     const mesh = new THREE.Group(); mesh.name = point.label || `RELAY ${index + 1}`;
@@ -41,6 +71,8 @@ export function createMission(THREE, scene, world) {
     box(intel, [1.6, .16, 1.1], [0, .35, 0], yellow);
     box(intel, [.6, .08, .1], [0, .12, -.52], lampMaterial());
     intel.visible = false;
+    batchStatic(equipment, new Set([indicator]));
+    batchStatic(mesh, new Set([beacon]));
     return { mesh, position: mesh.position, health: 6, maxHealth: 6, label: mesh.name, destroyed: false, recovered: false, equipment, radar, indicator, beacon, intel, flash: 0 };
   });
   const extraction = new THREE.Vector3(world.spawnPoint.x, world.spawnPoint.y ?? 12, world.spawnPoint.z);
@@ -48,8 +80,9 @@ export function createMission(THREE, scene, world) {
   const padRing = new THREE.Mesh(new THREE.RingGeometry(8.5, 9, 48), new THREE.MeshBasicMaterial({ color: '#72725b', side: THREE.DoubleSide, transparent: true, opacity: .7 }));
   padRing.rotation.x = -Math.PI / 2; padRing.position.y = .08; pad.add(padRing);
   box(pad, [1.1, .06, 8], [-2.5, .09, 0], yellow); box(pad, [1.1, .06, 8], [2.5, .09, 0], yellow); box(pad, [5, .06, 1.1], [0, .09, 0], yellow);
-  const padLamps = [];
-  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; padLamps.push(box(pad, [.5, .25, .5], [Math.sin(a) * 9, .2, Math.cos(a) * 9], lampMaterial())); }
+  const padLampMaterial = lampMaterial();
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; box(pad, [.5, .25, .5], [Math.sin(a) * 9, .2, Math.cos(a) * 9], padLampMaterial); }
+  batchStatic(pad);
   let time = 0, complete = false;
   const lastPosition = extraction.clone();
   function reset() {
@@ -85,7 +118,7 @@ export function createMission(THREE, scene, world) {
     }
     const ready = targets.every(target => target.recovered);
     padRing.material.color.set(ready ? '#c9ba6a' : '#72725b');
-    for (const lamp of padLamps) lamp.material.emissiveIntensity = ready ? .8 + .3 * Math.sin(time * 4) : .08;
+    padLampMaterial.emissiveIntensity = ready ? .8 + .3 * Math.sin(time * 4) : .08;
     if (ready && lastPosition.distanceTo(extraction) < 10) complete = true;
   }
   function snapshot() {

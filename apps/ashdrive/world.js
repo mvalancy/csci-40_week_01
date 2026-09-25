@@ -72,7 +72,7 @@ export function createWorld(THREE, scene) {
       if (!merged) continue;
       const result = new THREE.Mesh(merged, children[0].material);
       result.castShadow = children[0].castShadow; result.receiveShadow = children[0].receiveShadow;
-      result.name = 'Baked static geometry'; merged.computeBoundingSphere();
+      result.name = 'Baked static geometry'; result.matrixAutoUpdate = false; merged.computeBoundingSphere();
       for (const child of children) parent.remove(child);
       parent.add(result);
     }
@@ -124,29 +124,47 @@ export function createWorld(THREE, scene) {
     }
     return height;
   }
+  // Road planes never change. Reuse their coefficients for every projectile.
+  const roadPlanes = roadMap.flatMap(road => {
+    const slope = road.height / (road.end - road.plateau);
+    return [
+      { road, lo: -road.end, hi: -road.plateau, slope, intercept: road.end * slope },
+      { road, lo: -road.plateau, hi: road.plateau, slope: 0, intercept: road.height },
+      { road, lo: road.plateau, hi: road.end, slope: -slope, intercept: road.end * slope },
+    ];
+  });
   function segmentHit(from, to) {
     const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
     let nearest = Infinity;
-    // Slab intersection keeps thin columns and fast boosted projectiles solid.
-    for (const c of colliders) {
+    // Broad-phase interval rejection followed by scalar slab intersection.
+    // Avoid temporary per-collider arrays in this high-frequency combat query.
+    const minX = Math.min(from.x, to.x), maxX = Math.max(from.x, to.x);
+    const minY = Math.min(from.y, to.y), maxY = Math.max(from.y, to.y);
+    const minZ = Math.min(from.z, to.z), maxZ = Math.max(from.z, to.z);
+    const parallelX = Math.abs(dx) < 1e-9, parallelY = Math.abs(dy) < 1e-9, parallelZ = Math.abs(dz) < 1e-9;
+    const inverseX = parallelX ? 0 : 1 / dx, inverseY = parallelY ? 0 : 1 / dy, inverseZ = parallelZ ? 0 : 1 / dz;
+    for (let i = 0; i < colliders.length; i++) {
+      const c = colliders[i];
+      if (maxX < c.minX || minX > c.maxX || maxY < c.minY || minY > c.maxY || maxZ < c.minZ || minZ > c.maxZ) continue;
       let near = 0, far = 1;
-      for (const [origin, delta, low, high] of [[from.x,dx,c.minX,c.maxX],[from.y,dy,c.minY,c.maxY],[from.z,dz,c.minZ,c.maxZ]]) {
-        if (Math.abs(delta) < 1e-9) { if (origin < low || origin > high) { far = -1; break; } }
-        else { const a = (low - origin) / delta, b = (high - origin) / delta; near = Math.max(near, Math.min(a,b)); far = Math.min(far, Math.max(a,b)); }
-      }
+      if (parallelX) { if (from.x < c.minX || from.x > c.maxX) continue; }
+      else { const a = (c.minX - from.x) * inverseX, b = (c.maxX - from.x) * inverseX; near = Math.max(near, Math.min(a,b)); far = Math.min(far, Math.max(a,b)); }
+      if (parallelY) { if (from.y < c.minY || from.y > c.maxY) continue; }
+      else { const a = (c.minY - from.y) * inverseY, b = (c.maxY - from.y) * inverseY; near = Math.max(near, Math.min(a,b)); far = Math.min(far, Math.max(a,b)); }
+      if (far < near) continue;
+      if (parallelZ) { if (from.z < c.minZ || from.z > c.maxZ) continue; }
+      else { const a = (c.minZ - from.z) * inverseZ, b = (c.maxZ - from.z) * inverseZ; near = Math.max(near, Math.min(a,b)); far = Math.min(far, Math.max(a,b)); }
       if (far >= near && near <= 1 && far > .0001) nearest = Math.min(nearest, Math.max(.0001, near));
     }
-    for (const road of roadMap) {
+    for (let i = 0; i < roadPlanes.length; i++) {
+      const plane = roadPlanes[i], road = plane.road;
       const along = road.axis === 'z' ? from.z : from.x, across = road.axis === 'z' ? from.x : from.z;
       const dAlong = road.axis === 'z' ? dz : dx, dAcross = road.axis === 'z' ? dx : dz;
-      const slope = road.height / (road.end - road.plateau);
-      for (const [lo,hi,m,b] of [[-road.end,-road.plateau,slope,road.end*slope],[-road.plateau,road.plateau,0,road.height],[road.plateau,road.end,-slope,road.end*slope]]) {
-        const denominator = dy - m * dAlong;
-        if (Math.abs(denominator) < 1e-9) continue;
-        const t = (m * along + b - from.y) / denominator;
-        const n = along + dAlong * t, cross = across + dAcross * t;
-        if (t > .0001 && t <= 1 && n >= lo && n <= hi && Math.abs(cross - road.center) <= road.width / 2) nearest = Math.min(nearest, t);
-      }
+      const denominator = dy - plane.slope * dAlong;
+      if (Math.abs(denominator) < 1e-9) continue;
+      const t = (plane.slope * along + plane.intercept - from.y) / denominator;
+      const n = along + dAlong * t, cross = across + dAcross * t;
+      if (t > .0001 && t <= 1 && n >= plane.lo && n <= plane.hi && Math.abs(cross - road.center) <= road.width / 2) nearest = Math.min(nearest, t);
     }
     if (dy < 0 && from.y > 0) { const t = -from.y / dy; if (t <= 1) nearest = Math.min(nearest, t); }
     return Number.isFinite(nearest) ? { x: from.x + dx * nearest, y: from.y + dy * nearest, z: from.z + dz * nearest, t: nearest } : null;
@@ -364,7 +382,7 @@ export function createWorld(THREE, scene) {
     items.forEach((item, index) => { transform.position.set(...item.position); transform.scale.set(...item.size); transform.rotation.set(...(Array.isArray(item.rotation) ? item.rotation : [0, item.rotation, 0])); transform.updateMatrix(); batch.setMatrixAt(index, transform.matrix); });
     batch.receiveShadow = mat === groundMaterial || mat === concrete || cargoMaterials.includes(mat);
     batch.castShadow = cargoMaterials.includes(mat);
-    batch.computeBoundingSphere(); group.add(batch);
+    batch.matrixAutoUpdate = false; batch.computeBoundingSphere(); group.add(batch);
   }
   bakeStaticChildren(group, new Set([skyDome]));
   let currentQuality;
@@ -396,7 +414,7 @@ export function createWorld(THREE, scene) {
     update(dt, time, playerPosition) {
       if (playerPosition) { skyDome.position.x = playerPosition.x; skyDome.position.z = playerPosition.z; }
       if (smokeBatch.visible) {
-        smoke.forEach((s,i) => { s.mesh.position.x = s.x + Math.sin(time * .13 + s.phase) * 3; s.mesh.position.y = s.y + Math.sin(time * .18 + s.phase) * 2; s.mesh.rotation.y = time * .035 + s.phase; s.mesh.updateMatrix(); smokeBatch.setMatrixAt(i,s.mesh.matrix); });
+        for (let i = 0; i < smoke.length; i++) { const s = smoke[i]; s.mesh.position.x = s.x + Math.sin(time * .13 + s.phase) * 3; s.mesh.position.y = s.y + Math.sin(time * .18 + s.phase) * 2; s.mesh.rotation.y = time * .035 + s.phase; s.mesh.updateMatrix(); smokeBatch.setMatrixAt(i,s.mesh.matrix); }
         smokeBatch.instanceMatrix.needsUpdate = true;
       }
       for (const c of carriers) {
@@ -413,7 +431,7 @@ export function createWorld(THREE, scene) {
         trafficTransform.position.set(0,0,-1.8); trafficTransform.scale.set(.8,.16,.3); trafficTransform.updateMatrix();
         trafficMatrix.multiplyMatrices(t.mesh.matrix, trafficTransform.matrix); (i % 2 ? trafficAmber : trafficRed).setMatrixAt(Math.floor(i/2),trafficMatrix);
       }
-      trafficHull.instanceMatrix.needsUpdate = trafficAmber.instanceMatrix.needsUpdate = trafficRed.instanceMatrix.needsUpdate = true;
+      if (trafficHull.visible) trafficHull.instanceMatrix.needsUpdate = trafficAmber.instanceMatrix.needsUpdate = trafficRed.instanceMatrix.needsUpdate = true;
     },
   };
 }

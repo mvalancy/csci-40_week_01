@@ -18,11 +18,12 @@ export function createNavigation(THREE, camera, container = document.body) {
     .cb-nav-objective-label{padding:3px 6px;background:#171d16b3;border-bottom:1px solid #bda26a66;letter-spacing:1px;font-size:8px}
     .cb-nav-objective-distance{display:block;color:#c4c5ac;font-size:9px;margin-top:1px}
     .cb-nav-enemy{color:#cdad78;font-size:7px;letter-spacing:1px}
+    .cb-nav-health{width:48px;height:3px;background:#33291ecc;margin:4px auto;border:1px solid #cba65f55}.cb-nav-health i{display:block;height:100%;background:#e1be79}
     .cb-nav-brackets{width:30px;height:24px;display:block;margin:0 auto 5px;background:linear-gradient(#d3b886,#d3b886) left top/7px 1px no-repeat,linear-gradient(#d3b886,#d3b886) left top/1px 7px no-repeat,linear-gradient(#d3b886,#d3b886) right top/7px 1px no-repeat,linear-gradient(#d3b886,#d3b886) right top/1px 7px no-repeat,linear-gradient(#d3b886,#d3b886) left bottom/7px 1px no-repeat,linear-gradient(#d3b886,#d3b886) left bottom/1px 7px no-repeat,linear-gradient(#d3b886,#d3b886) right bottom/7px 1px no-repeat,linear-gradient(#d3b886,#d3b886) right bottom/1px 7px no-repeat}
     @media(max-width:650px){.cb-nav-compass{top:110px;width:170px;font-size:7px}.cb-nav-compass-line{font-size:6px}.cb-nav-objective-label{font-size:7px;letter-spacing:.5px}.cb-nav-objective-distance{font-size:8px}.cb-nav-enemy{font-size:6px}}
     @media(max-height:550px){.cb-nav-compass{display:none}.cb-nav-objective-label{font-size:7px}}
   `;
-  root.innerHTML = '<div class="cb-nav-compass"><strong></strong><div class="cb-nav-compass-line"><span></span><span></span><span></span><span></span><span></span></div></div><div class="cb-nav-objective"><i class="cb-nav-symbol"></i><div class="cb-nav-objective-label"></div><span class="cb-nav-objective-distance"></span></div><div class="cb-nav-enemy" hidden><i class="cb-nav-brackets"></i><span></span></div>';
+  root.innerHTML = '<div class="cb-nav-compass"><strong></strong><div class="cb-nav-compass-line"><span></span><span></span><span></span><span></span><span></span></div></div><div class="cb-nav-objective"><i class="cb-nav-symbol"></i><div class="cb-nav-objective-label"></div><span class="cb-nav-objective-distance"></span></div><div class="cb-nav-enemy" hidden><i class="cb-nav-brackets"></i><span></span><div class="cb-nav-health"><i></i></div></div>';
   container.append(style, root);
   const compass = root.querySelector('.cb-nav-compass strong');
   const ticks = [...root.querySelectorAll('.cb-nav-compass-line span')];
@@ -32,6 +33,7 @@ export function createNavigation(THREE, camera, container = document.body) {
   const distanceLabel = root.querySelector('.cb-nav-objective-distance');
   const enemyMarker = root.querySelector('.cb-nav-enemy');
   const enemyLabel = enemyMarker.querySelector('span');
+  const enemyHealth = enemyMarker.querySelector('.cb-nav-health i');
   const projected = new THREE.Vector3(), direction = new THREE.Vector3(), cameraForward = new THREE.Vector3();
   const point = new THREE.Vector3();
   const headings = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -44,7 +46,7 @@ export function createNavigation(THREE, camera, container = document.body) {
     projected.copy(point).project(camera);
     return { x: (projected.x + 1) * width / 2, y: (1 - projected.y) * height / 2, front };
   }
-  function update({ bikePosition, heading = 0, mission, enemies = [], mode }) {
+  function update({ bikePosition, heading = 0, mission, lock = null, mode }) {
     root.hidden = mode !== 'playing' || !bikePosition || !mission;
     if (root.hidden) return;
     const width = innerWidth, height = innerHeight, mobile = width <= 650;
@@ -78,23 +80,17 @@ export function createNavigation(THREE, camera, container = document.body) {
       distanceLabel.textContent = `${Math.round(distance)} M${onScreen ? '' : ' / ' + (Math.abs(bearing) > 2.5 ? 'TURN BACK' : bearing > .15 ? 'LEFT' : bearing < -.15 ? 'RIGHT' : 'AHEAD')}`;
       objectiveScreen = { x, y };
     }
-    let nearest = null, nearestDistance = 220;
-    for (const enemy of enemies) {
-      if (enemy.health <= 0 || enemy.destroyed || enemy.mesh?.visible === false) continue;
-      const position = enemy.mesh?.position || enemy.position;
-      if (!position) continue;
-      const dx = position.x - bikePosition.x, dz = position.z - bikePosition.z;
-      const distance = Math.hypot(dx, (position.y ?? 0) - bikePosition.y, dz);
-      const angle = Math.atan2(-dx, -dz) - heading;
-      if (Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))) < .95 && distance < nearestDistance) { nearest = position; nearestDistance = distance; }
-    }
+    const nearest = lock?.target.mesh?.position || lock?.target.position;
+    const nearestDistance = lock?.distance || 0;
     enemyMarker.hidden = true;
     if (nearest) {
       const screen = project(nearest, width, height);
-      const clearOfObjective = !objectiveScreen || Math.hypot(screen.x - objectiveScreen.x, screen.y - objectiveScreen.y) > 75;
-      if (screen.front && screen.x > 100 && screen.x < width - 100 && screen.y > (mobile ? 250 : 175) && screen.y < height - (mobile ? 235 : 180) && clearOfObjective) {
+      if (objectiveScreen && Math.hypot(screen.x - objectiveScreen.x, screen.y - objectiveScreen.y) < 75) screen.y = objectiveScreen.y + 70;
+      if (screen.front && screen.x > 100 && screen.x < width - 100 && screen.y > (mobile ? 250 : 175) && screen.y < height - (mobile ? 235 : 180)) {
         enemyMarker.hidden = false; enemyMarker.style.left = `${Math.round(screen.x)}px`; enemyMarker.style.top = `${Math.round(screen.y)}px`;
-        enemyLabel.textContent = `Q / LOCK CONE · ${Math.round(nearestDistance)} M`;
+        const name = lock.target.label || (lock.target.type === 'gunship' ? 'GUNSHIP' : lock.target.type === 'turret' ? 'SENTRY' : 'INTERCEPTOR');
+        enemyLabel.textContent = `Q / ${name} · ${Math.round(nearestDistance)} M`;
+        enemyHealth.style.width = `${100 * clamp(lock.target.health / (lock.target.maxHealth || lock.target.health), 0, 1)}%`;
       }
     }
   }

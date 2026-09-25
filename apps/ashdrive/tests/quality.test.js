@@ -67,3 +67,44 @@ test('manual low stays fixed and emergency scales do not flap around downgrade t
   assert.equal(q.snapshot().scale,.35);
   q.setQuality('auto');assert.equal(q.snapshot().scale,.85);
 });
+
+function withGpu(policy, fps, seconds, milliseconds, { stale = false, repeated = false } = {}) {
+  for (let i = 0; i < fps * seconds; i++) policy.update(1 / fps, {
+    supported: true, gpuMs: milliseconds, sampleId: repeated ? 'one' : `${seconds}/${i >> 2}`,
+    ageSeconds: stale ? 4 : .1,
+  });
+}
+test('cheap GPU work prevents pointless emergency blur during low-FPS CPU contention', () => {
+  const q = createQualityController(strong);
+  withGpu(q, 20, 30, 3);
+  assert.equal(q.snapshot().tier, 'low');
+  assert.equal(q.snapshot().scale, .65);
+});
+test('fresh expensive GPU work still reaches emergency resolution', () => {
+  const q = createQualityController(strong);
+  withGpu(q, 20, 30, 24);
+  assert.equal(q.snapshot().scale, .35);
+});
+test('GPU headroom restores clarity gradually even while other work limits FPS', () => {
+  const q = createQualityController(strong); simulate(q, 20, 24);
+  withGpu(q, 20, 7, 2); assert.equal(q.snapshot().scale, .35);
+  withGpu(q, 20, 7, 2); assert.equal(q.snapshot().scale, .45);
+  withGpu(q, 20, 12, 2); assert.equal(q.snapshot().scale, .55);
+  withGpu(q, 20, 12, 2); assert.equal(q.snapshot().scale, .65);
+  assert.equal(q.snapshot().tier, 'low');
+});
+test('a resolution increase requires room for the predicted higher pixel cost', () => {
+  const q = createQualityController(strong); simulate(q, 20, 24);
+  withGpu(q, 20, 25, 8); assert.equal(q.snapshot().scale, .35);
+  withGpu(q, 20, 15, 2); assert.equal(q.snapshot().scale, .45);
+});
+test('stale, absent, or repeatedly reused single samples cannot claim GPU headroom', () => {
+  for (const options of [{ stale: true }, { repeated: true }]) {
+    const q = createQualityController(strong); withGpu(q, 20, 30, 2, options);
+    assert.equal(q.snapshot().scale, .35);
+  }
+});
+test('GPU feedback never overrides a manual graphics selection', () => {
+  const q = createQualityController(strong); q.setQuality('low'); withGpu(q, 20, 30, 30);
+  assert.equal(q.snapshot().scale, .65); assert.equal(q.snapshot().mode, 'low');
+});

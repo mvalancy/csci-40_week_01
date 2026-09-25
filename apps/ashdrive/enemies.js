@@ -134,7 +134,22 @@ export function createEnemy(THREE, type = 'drone') {
     }
   }
   rotors.forEach(bake); bake(root);
-  root.userData.update = (dt) => rotors.forEach((rotor, index) => { rotor.rotation.y += dt * (index % 2 ? -24 : 24); });
+  const idleColor = signal.color.clone(), idleEmission = signal.emissive.clone();
+  const chargeColor = new THREE.Color('#ffc34e'), chargeEmission = new THREE.Color('#ff9b24');
+  const flashColor = new THREE.Color('#fff0c7');
+  let flashRemaining = 0;
+  root.userData.update = (dt, charge = 0, firing = false) => {
+    for (let index = 0; index < rotors.length; index++) rotors[index].rotation.y += dt * (index % 2 ? -24 : 24);
+    flashRemaining = firing ? .09 : Math.max(0, flashRemaining - dt);
+    if (flashRemaining > 0) {
+      signal.color.copy(flashColor); signal.emissive.copy(flashColor); signal.emissiveIntensity = 5;
+      return;
+    }
+    const amount = Number.isFinite(charge) ? Math.max(0, Math.min(1, charge)) : 0;
+    signal.color.copy(idleColor).lerp(chargeColor, amount);
+    signal.emissive.copy(idleEmission).lerp(chargeEmission, amount);
+    signal.emissiveIntensity = 1.2 + amount * 3;
+  };
   root.userData.type = type;
   const resources = { geometries: new Set(), materials: new Set(), textures: new Set() };
   root.traverse(object => {

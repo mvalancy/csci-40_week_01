@@ -3,6 +3,33 @@ export function angleDelta(target, current) {
   return Math.atan2(Math.sin(target - current), Math.cos(target - current));
 }
 
+// Share this selection between the weapons and their HUD marker. Groups avoid
+// concatenating enemy/relay arrays each frame, and obstruction checks only run
+// for live in-cone candidates close enough to replace the current lock.
+export function selectVisibleTarget(origin, heading, targetGroups, {
+  maxAngle = Math.PI,
+  maxRange = 220,
+  isBlocked,
+} = {}) {
+  let bestTarget = null, bestDistanceSquared = Infinity, bestAngle = 0;
+  const rangeSquared = maxRange * maxRange;
+  for (const targets of targetGroups) {
+    for (const target of targets) {
+      if (!(target.health > 0) || target.destroyed || target.recovered || target.visible === false || target.mesh?.visible === false) continue;
+      const position = target.mesh?.position || target.position;
+      if (!position) continue;
+      const dx = position.x - origin.x, dy = (position.y ?? 0) - (origin.y ?? 0), dz = position.z - origin.z;
+      const distanceSquared = dx * dx + dy * dy + dz * dz;
+      if (!Number.isFinite(distanceSquared) || distanceSquared < 1e-8 || distanceSquared > rangeSquared || distanceSquared >= bestDistanceSquared) continue;
+      const angle = Math.atan2(-dx, -dz);
+      if (Math.abs(angleDelta(angle, heading)) > maxAngle) continue;
+      if (isBlocked?.(origin, position, target)) continue;
+      bestTarget = target; bestDistanceSquared = distanceSquared; bestAngle = angle;
+    }
+  }
+  return bestTarget ? { target: bestTarget, distance: Math.sqrt(bestDistanceSquared), angle: bestAngle } : null;
+}
+
 // Swept collision in all three dimensions: the skyway and ground share X/Z,
 // so a projectile must also be at the target's altitude to cause damage.
 export function segmentHit3D(from, to, target, radius) {
@@ -68,4 +95,19 @@ export function interceptHeading(origin, target, velocity, projectileSpeed) {
     }
   }
   return Math.atan2(-dx - velocity.x * time, -dz - velocity.z * time);
+}
+
+// Earliest impact along a swept projectile, for ordering cover and targets.
+export function segmentSphereT(from, to, center, radius) {
+  const ox = from.x - center.x, oy = from.y - center.y, oz = from.z - center.z;
+  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+  const c = ox * ox + oy * oy + oz * oz - radius * radius;
+  if (c <= 0) return 0;
+  const a = dx * dx + dy * dy + dz * dz;
+  if (a <= Number.EPSILON) return null;
+  const halfB = ox * dx + oy * dy + oz * dz;
+  const discriminant = halfB * halfB - a * c;
+  if (discriminant < 0) return null;
+  const t = (-halfB - Math.sqrt(discriminant)) / a;
+  return t >= 0 && t <= 1 ? t : null;
 }

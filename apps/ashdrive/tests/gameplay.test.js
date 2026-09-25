@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { angleDelta, sweptHit, segmentHit3D, assistedHeading, interceptHeading } from '../gameplay.js';
+import { angleDelta, sweptHit, segmentHit3D, assistedHeading, interceptHeading, selectVisibleTarget } from '../gameplay.js';
 import * as THREE from 'three';
 import { createMission } from '../missions.js';
 
@@ -114,4 +114,55 @@ test('mission rejects invalid damage without corrupting health', () => {
   for (const damage of [NaN, Infinity, -1, 0]) assert.equal(mission.hit(target, damage), false);
   assert.equal(target.health, 6);
   assert.equal(mission.hit({ health: 6 }, 10), false);
+});
+
+const lockOrigin = { x: 0, y: 1.35, z: 0 };
+const lockTarget = (x, z, extra = {}) => ({ health: 3, position: { x, y: 1.35, z }, ...extra });
+
+test('weapon lock skips covered targets and chooses the nearest visible target across enemies and relays', () => {
+  const hiddenDrone = lockTarget(0, -8), visibleDrone = lockTarget(0, -30), visibleRelay = lockTarget(0, -20);
+  const groups = [[hiddenDrone, visibleDrone], [visibleRelay]];
+  const selected = selectVisibleTarget(lockOrigin, 0, groups, { maxAngle: .95, isBlocked: (_from, _to, target) => target === hiddenDrone });
+  assert.equal(selected.target, visibleRelay);
+  assert.equal(selected.distance, 20);
+  assert.ok(Math.abs(selected.angle) < 1e-9);
+  assert.equal(groups[0][0], hiddenDrone, 'selection leaves caller ordering untouched');
+});
+
+test('lock acquisition respects aim cone, full 3D range, and wrapped headings', () => {
+  const behind = lockTarget(0, 10), side = lockTarget(-10, -10), high = lockTarget(0, -10, { position: { x: 0, y: 101.35, z: -10 } });
+  assert.equal(selectVisibleTarget(lockOrigin, 0, [[behind, side, high]], { maxAngle: .2, maxRange: 50 }), null);
+  const wrapped = lockTarget(.1, 10);
+  assert.equal(selectVisibleTarget(lockOrigin, Math.PI - .02, [[wrapped]], { maxAngle: .1 }).target, wrapped);
+  const boundary = lockTarget(0, -50);
+  assert.equal(selectVisibleTarget(lockOrigin, 0, [[boundary]], { maxRange: 50 }).target, boundary);
+});
+
+test('destroyed, recovered, invisible, and invalid candidates cannot steal a lock', () => {
+  const valid = { health: 6, mesh: { visible: true, position: { x: 0, y: 1.35, z: -40 } } };
+  const inactive = [
+    lockTarget(0, -2, { health: 0 }), lockTarget(0, -3, { destroyed: true }),
+    lockTarget(0, -4, { recovered: true }), lockTarget(0, -5, { visible: false }),
+    { health: 3, mesh: { visible: false, position: { x: 0, y: 1.35, z: -6 } } },
+    lockTarget(NaN, -7), lockTarget(0, 0), { health: 3 },
+  ];
+  assert.equal(selectVisibleTarget(lockOrigin, 0, [inactive, [valid]]).target, valid);
+});
+
+test('occlusion query uses muzzle origin and runs only for candidates that could win', () => {
+  const behind = lockTarget(0, 2), far = lockTarget(0, -230), near = lockTarget(0, -10), farther = lockTarget(0, -20);
+  const calls = [];
+  const selection = selectVisibleTarget(lockOrigin, 0, [[behind, far, near, farther]], {
+    maxAngle: .95,
+    isBlocked: (from, to, target) => { calls.push(target); assert.equal(from, lockOrigin); assert.equal(to, target.position); return false; },
+  });
+  assert.equal(selection.target, near);
+  assert.deepEqual(calls, [near]);
+});
+
+test('all obstructed targets produce no lock and ties retain stable caller order', () => {
+  const first = lockTarget(0, -20), second = lockTarget(0, -20);
+  assert.equal(selectVisibleTarget(lockOrigin, 0, [[first], [second]], { isBlocked: () => true }), null);
+  assert.equal(selectVisibleTarget(lockOrigin, 0, [[first], [second]]).target, first);
+  assert.equal(selectVisibleTarget(lockOrigin, 0, [[], []]), null);
 });

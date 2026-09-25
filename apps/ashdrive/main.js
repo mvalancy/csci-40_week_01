@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createRendering } from './rendering.js';
-import { angleDelta, segmentHit3D as segmentHit } from './gameplay.js';
+import { angleDelta, segmentSphereT, selectVisibleTarget } from './gameplay.js';
 import { createWorld } from './world.js';
 import { createCombatBike } from './bike.js';
 import { createEffects } from './effects.js';
@@ -13,7 +13,8 @@ import { stepVertical } from './physics.js';
 import { buildRoute } from './route.js';
 import { createTacticalMap } from './tactical-map.js';
 
-const $ = id => document.getElementById(id);
+const elements = new Map();
+const $ = id => { if (!elements.has(id)) elements.set(id, document.getElementById(id)); return elements.get(id); };
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#77776a');
 scene.fog = new THREE.FogExp2('#77776a', .003);
@@ -43,11 +44,16 @@ const green = new THREE.MeshStandardMaterial({ color: '#91a169', emissive: '#7e9
 function box(parent, size, pos, material = metal) { const m = new THREE.Mesh(boxGeometry, material); m.scale.set(...size); m.position.set(...pos); parent.add(m); return m; }
 const keys = new Set();
 const state = window.__app = { ready: false, frames: 0, backend: graphics.backend, fps: 0, mode: 'menu', health: 100, energy: 100, score: 0, wave: 1, speed: 0, shots: 0, kills: 0, x: world.spawnPoint.x, y: world.spawnPoint.y, z: world.spawnPoint.z, heading: 0, boosted: false, autopilot: false, missiles: 8, missilesFired: 0, empCooldown: 0, empUses: 0, camera: 'chase', enemies: 0, airborne: false };
-let enemies = [], bullets = [], pickups = [];
+const enemies = [], bullets = [], pickups = [];
+const targetGroups = [enemies, mission.targets];
+const lockOrigin = new THREE.Vector3(), bulletPrevious = new THREE.Vector3(), bulletDirection = new THREE.Vector3();
+const bikeHitPoint = new THREE.Vector3(), forwardAxis = new THREE.Vector3(0, 0, -1);
+const visibilityOptions = { maxAngle: Math.PI, maxRange: 220, isBlocked: (from, to) => world.segmentBlocked(from, to) };
 let vertical = { y: world.spawnPoint.y, vy: 0, grounded: true, previousFloor: world.spawnPoint.y };
 let autoRoute = [], autoObjective = -1, autoRouteKey = '', autoCollision = 0;
 let speed = 0, heading = 0, shootTimer = 0, missileTimer = 0, spawnTimer = 0, hitTimer = 0, noticeTimer = 0, elapsed = 0, dustTimer = 0, uiTimer = 0, cameraShake = 0, muzzleSide = 1;
 const sound = createAudio();
+let hitConfirmUntil = 0;
 let seed = 94;
 const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
 function announce(text, duration = 2.5) { $('notice').textContent = text; noticeTimer = duration; }
@@ -56,10 +62,9 @@ function start(autopilot = false) {
   for (const list of [enemies, bullets, pickups]) clean(list); fx.clear(); mission.reset();
   Object.assign(state, { mode: 'playing', freeRoam: false, health: 100, energy: 100, score: 0, wave: 1, shots: 0, kills: 0, speed: 0, boosted: false, x: world.spawnPoint.x, y: world.spawnPoint.y, z: world.spawnPoint.z, heading: 0, autopilot, missiles: 8, missilesFired: 0, empCooldown: 0, empUses: 0, camera: 'chase', mission: mission.snapshot() });
   bike.position.set(world.spawnPoint.x, world.spawnPoint.y, world.spawnPoint.z); bike.rotation.set(0, 0, 0); bike.visible = true;
-  speed = 0; heading = 0; vertical = { y: world.spawnPoint.y, vy: 0, grounded: true, previousFloor: world.spawnPoint.y }; autoRoute = []; autoObjective = -1; autoRouteKey = ''; autoCollision = 0; tacticalMap.close(); shootTimer = 0; missileTimer = 0; spawnTimer = 0; hitTimer = 1.5; cameraShake = 0; keys.clear(); seed = 94;
+  hitConfirmUntil = 0; speed = 0; heading = 0; vertical = { y: world.spawnPoint.y, vy: 0, grounded: true, previousFloor: world.spawnPoint.y }; autoRoute = []; autoObjective = -1; autoRouteKey = ''; autoCollision = 0; tacticalMap.close(); shootTimer = 0; missileTimer = 0; spawnTimer = 0; hitTimer = 1.5; cameraShake = 0; keys.clear(); seed = 94;
   camera.fov = 62; camera.updateProjectionMatrix(); camera.position.set(bike.position.x, bike.position.y + 6, bike.position.z + 11);
   $('menu').hidden = true; $('end').hidden = true;
-  if(graphics.quality.mode === 'auto') graphics.setQuality('auto');
   sound.start(); spawnWave();
 }
 function spawnWave() {
@@ -71,7 +76,7 @@ function spawnWave() {
     const x = THREE.MathUtils.clamp(bike.position.x + Math.sin(angle) * 55, -205, 205), z = THREE.MathUtils.clamp(bike.position.z - 35 + Math.cos(angle) * 55, -205, 205);
     mesh.position.set(x, world.heightAt(x, z) + (type === 'gunship' ? 13 : type === 'turret' ? 1.1 : 2.4), z);
     mesh.traverse(m => { if (m.isMesh) m.castShadow = true; }); scene.add(mesh);
-    enemies.push({ mesh, health: (type === 'gunship' ? 10 : type === 'turret' ? 6 : 3) + Math.floor(state.wave / 3), cooldown: 2 + i * .5, phase: random() * 6, salvo: 0, type, radius: type === 'gunship' ? 4 : 2.5 });
+    enemies.push({ mesh, health: (type === 'gunship' ? 10 : type === 'turret' ? 6 : 3) + Math.floor(state.wave / 3), maxHealth: (type === 'gunship' ? 10 : type === 'turret' ? 6 : 3) + Math.floor(state.wave / 3), cooldown: 2 + i * .5, phase: random() * 6, salvo: 0, type, radius: type === 'gunship' ? 4 : 2.5 });
   }
   announce(`DEFENSE WAVE ${String(state.wave).padStart(2, '0')} / WEAPONS FREE`);
 }
@@ -87,12 +92,9 @@ function damage(amount) {
   if (!state.health) end();
 }
 function nearestTarget(maxAngle = Math.PI, maxRange = 220) {
-  let best = null;
-  for (const target of [...enemies, ...mission.targets.filter(t => t.health > 0)]) {
-    const p = target.mesh.position, distance = p.distanceTo(bike.position), angle = Math.atan2(bike.position.x - p.x, bike.position.z - p.z), difference = Math.abs(angleDelta(angle, heading));
-    if (difference <= maxAngle && distance < maxRange && (!best || distance < best.distance)) best = { target, distance, angle };
-  }
-  return best;
+  lockOrigin.copy(bike.position); lockOrigin.y += 1.35;
+  visibilityOptions.maxAngle = maxAngle; visibilityOptions.maxRange = maxRange;
+  return selectVisibleTarget(lockOrigin, heading, targetGroups, visibilityOptions);
 }
 function fire(origin, angle, hostile = false, target = null, missile = false) {
   const direction = new THREE.Vector3(-Math.sin(angle), 0, -Math.cos(angle));
@@ -103,6 +105,7 @@ function fire(origin, angle, hostile = false, target = null, missile = false) {
   const mesh = box(scene, [missile ? .22 : .1, missile ? .22 : .1, missile ? 1.3 : 2.3], muzzle.toArray(), hostile ? hostileMaterial : shotMaterial);
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
   bullets.push({ mesh, velocity: direction.multiplyScalar(missile ? 52 : hostile ? 36 : 160), life: missile ? 5 : hostile ? 5 : 1.8, hostile, missile, target, smokeTimer: 0 });
+  if (hostile) fx.hit(muzzle, '#ff9a52');
   if (!hostile) { state.shots++; if (missile) { state.missiles--; state.missilesFired++; sound.missile(); } else sound.cannon(); cameraShake = Math.max(cameraShake, missile ? .15 : .025); fx.hit(muzzle, '#ffb54d'); }
 }
 function rocket() {
@@ -127,9 +130,17 @@ function hitEnemy(enemy, amount) {
   if (state.kills % 2 === 0) { const mesh = box(scene, [1.3, .8, 1.3], [enemy.mesh.position.x, world.heightAt(enemy.mesh.position.x, enemy.mesh.position.z, bike.position.y) + .7, enemy.mesh.position.z], green); pickups.push({ mesh, life: 35 }); }
   announce(`TARGET DESTROYED / +${250 * state.wave}`);
 }
-$('continue').onclick = () => { state.mode='playing'; state.freeRoam=true; $('end').hidden=true; announce('FREE EXPLORATION / SECTOR SECURED'); };
-$('hangar').onclick = () => { state.mode = 'menu'; $('end').hidden = true; $('menu').hidden = false; bike.visible = true; };
-function togglePause() { if(tacticalMap.visible)return; if (['playing', 'paused'].includes(state.mode)) { state.mode = state.mode === 'playing' ? 'paused' : 'playing'; announce(state.mode === 'paused' ? 'PAUSED / P TO RESUME' : 'REMOTE LINK ACTIVE', 3); } }
+$('continue').onclick = () => { state.mode='playing'; state.freeRoam=true; state.autopilot=false; autoRoute=[]; keys.clear(); speed=0; $('end').hidden=true; announce('FREE EXPLORATION / SECTOR SECURED'); };
+function returnToHangar() {
+  state.mode = 'menu'; state.autopilot = false; keys.clear(); speed = 0;
+  for (const list of [enemies, bullets, pickups]) clean(list);
+  fx.clear(); mission.reset(); state.mission = mission.snapshot();
+  $('end').hidden = true; $('menu').hidden = false; if ($('pause-menu')) $('pause-menu').hidden = true; bike.visible = true;
+  $('start').focus({ preventScroll: true });
+  noticeTimer = 0; hitConfirmUntil = 0; uiTimer = 0; renderDirty = true;
+}
+$('hangar').onclick = returnToHangar;
+function togglePause() { if(tacticalMap.visible)return; if (['playing', 'paused'].includes(state.mode)) { state.mode = state.mode === 'playing' ? 'paused' : 'playing'; keys.clear(); if (state.mode === 'playing') renderer.domElement.focus({ preventScroll: true }); announce(state.mode === 'paused' ? 'PAUSED / P TO RESUME' : 'REMOTE LINK ACTIVE', 3); } }
 function changeCamera() { state.camera = state.camera === 'chase' ? 'cockpit' : state.camera === 'cockpit' ? 'tactical' : 'chase'; announce(`${state.camera.toUpperCase()} CAMERA`); }
 function toggleMap() {
   if (!tacticalMap.visible && !['playing','paused'].includes(state.mode)) return;
@@ -139,17 +150,31 @@ function toggleMap() {
 addEventListener('cyber-map-close',()=>{state.mode=mapPreviousMode;});
 $('map-toggle').onclick=toggleMap;
 $('pause-toggle').onclick = togglePause;
+$('resume-game')?.addEventListener('click', () => { togglePause(); renderer.domElement.focus({ preventScroll: true }); });
+$('pause-hangar')?.addEventListener('click', returnToHangar);
 $('quality-select').onchange = event => { graphics.setQuality(event.target.value); renderDirty=true; renderer.domElement.focus({preventScroll:true}); };
-$('audio-toggle').onclick = () => { const muted = sound.toggle(); $('audio-toggle').textContent = muted ? 'MUTED' : 'SOUND'; };
+function toggleSound() {
+  const muted = sound.toggle(); $('audio-toggle').textContent = muted ? 'MUTED' : 'SOUND';
+  $('audio-toggle').setAttribute('aria-pressed', String(muted)); announce(muted ? 'AUDIO OFF' : 'AUDIO ON');
+}
+$('audio-toggle').onclick = toggleSound;
 for (const b of document.querySelectorAll('[data-action]')) b.onclick = () => ({ missile: rocket, emp, camera: changeCamera })[b.dataset.action]();
 $('start').onclick = () => start(false); $('demo').onclick = () => start(true); $('restart').onclick = () => start(false);
 addEventListener('keydown', event => {
   if (event.target instanceof HTMLSelectElement && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter'].includes(event.code)) return;
   if (state.mode === 'playing' && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
-  if (event.code==='Tab') { if(tacticalMap.visible || ['playing','paused'].includes(state.mode)) { event.preventDefault(); if(!event.repeat)toggleMap(); } return; }
+  if (event.code === 'Tab' && state.mode === 'paused' && !tacticalMap.visible) {
+    event.preventDefault();
+    const buttons = [$('resume-game'), $('pause-hangar')];
+    const current = buttons.indexOf(document.activeElement);
+    buttons[(current + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+    return;
+  }
+  if (event.code === 'Escape' && state.mode === 'paused' && !tacticalMap.visible) { togglePause(); return; }
+  if (event.code==='Tab') { if(tacticalMap.visible || state.mode === 'playing') { event.preventDefault(); if(!event.repeat)toggleMap(); } return; }
   if (event.code==='Escape' && tacticalMap.visible) { toggleMap(); return; }
   keys.add(event.code); if (event.repeat) return;
-  if (event.code === 'KeyM') { const muted = sound.toggle(); announce(muted ? 'AUDIO OFF' : 'AUDIO ON'); }
+  if (event.code === 'KeyM') toggleSound();
   if (event.code === 'KeyQ') rocket(); if (event.code === 'KeyE') emp();
   if (event.code === 'KeyC') changeCamera();
   if (event.code === 'KeyP') togglePause();
@@ -162,8 +187,6 @@ for (const button of document.querySelectorAll('[data-key]')) {
 }
 function update(dt) {
   elapsed += dt; hitTimer -= dt; shootTimer -= dt; missileTimer -= dt; noticeTimer -= dt; cameraShake *= Math.exp(-dt * 7); state.empCooldown = Math.max(0, state.empCooldown - dt);
-  if (noticeTimer < 0) $('notice').textContent = state.autopilot && state.mode === 'playing' ? 'AUTONOMOUS COMBAT SORTIE' : '';
-  world.update(dt, elapsed, bike.position); fx.update(dt);
   if (state.mode === 'playing') {
     let throttle = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
     let steer = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
@@ -225,38 +248,53 @@ function update(dt) {
         else if (distance < range - 7) enemy.mesh.position.addScaledVector(delta.normalize(), -5 * dt);
         if (enemy.type === 'gunship') { enemy.mesh.position.x += Math.cos(enemy.mesh.rotation.y) * 7 * dt; enemy.mesh.position.z -= Math.sin(enemy.mesh.rotation.y) * 7 * dt; enemy.mesh.rotation.z = Math.sin(elapsed + enemy.phase) * .09; }
       }
-      enemy.cooldown -= dt;
+      enemy.cooldown -= dt; enemy.flash = Math.max(0, (enemy.flash || 0) - dt);
       const aimPoint = bike.position.clone().add(new THREE.Vector3(0, 1, 0));
-      if (enemy.cooldown <= 0 && distance < 150 && !world.segmentBlocked(enemy.mesh.position, aimPoint)) {
+      const clearShot = distance < 150 && enemy.cooldown < .65 && !world.segmentBlocked(enemy.mesh.position, aimPoint);
+      enemy.charge = clearShot ? 1 - Math.max(0, enemy.cooldown) / .65 : 0;
+      if (enemy.cooldown <= 0 && clearShot) {
         fire(enemy.mesh.position, enemy.mesh.rotation.y, true, { mesh: { position: aimPoint } });
-        enemy.salvo++;
+        enemy.salvo++; enemy.flash = .15;
         enemy.cooldown = enemy.type === 'gunship' && enemy.salvo % 3 ? .22 : Math.max(1.1, 3.2 - state.wave * .12) + random();
       }
       if (distance < 2.8 && Math.abs(enemy.mesh.position.y - bike.position.y) < 4) damage(12);
-      enemy.mesh.userData.update?.(dt);
     }
+    bikeHitPoint.copy(bike.position); bikeHitPoint.y += 1;
     for (let i = bullets.length - 1; i >= 0; i--) {
       const b = bullets[i];
       if (b.life <= 0) { scene.remove(b.mesh); bullets.splice(i, 1); continue; }
-      const previous = b.mesh.position.clone();
-      if (b.missile && b.target && (enemies.includes(b.target) || mission.targets.includes(b.target)) && b.target.health > 0) { const desired = b.target.mesh.position.clone().sub(b.mesh.position).normalize().multiplyScalar(70); b.velocity.lerp(desired, 1 - Math.exp(-dt * 4)); b.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), b.velocity.clone().normalize()); }
+      const previous = bulletPrevious.copy(b.mesh.position);
+      if (b.missile && b.target && (enemies.includes(b.target) || mission.targets.includes(b.target)) && b.target.health > 0) { const desired = bulletDirection.copy(b.target.mesh.position).sub(b.mesh.position).normalize().multiplyScalar(70); b.velocity.lerp(desired, 1 - Math.exp(-dt * 4)); b.mesh.quaternion.setFromUnitVectors(forwardAxis, bulletDirection.copy(b.velocity).normalize()); }
       b.mesh.position.addScaledVector(b.velocity, dt); b.life -= dt;
       if (b.missile) { b.smokeTimer -= dt; if (b.smokeTimer <= 0) { fx.trail(b.mesh.position, Math.atan2(-b.velocity.x, -b.velocity.z), true); b.smokeTimer = .07; } }
       const obstacle = world.segmentHit(previous, b.mesh.position);
-      if (obstacle) { b.mesh.position.set(obstacle.x, obstacle.y, obstacle.z); b.life = 0; if (b.missile) fx.explode(b.mesh.position, 1.3); else fx.hit(b.mesh.position); }
-      if (!obstacle && b.hostile && segmentHit(previous, b.mesh.position, bike.position.clone().add(new THREE.Vector3(0, 1, 0)), 1.5)) { damage(8); b.life = 0; }
-      if (!obstacle && !b.hostile) for (const enemy of [...enemies]) {
-        if (segmentHit(previous, b.mesh.position, enemy.mesh.position, enemy.radius)) {
-          b.life = 0; hitEnemy(enemy, b.missile ? 7 : 1);
-          if (b.missile) { fx.explode(b.mesh.position, 1.4); for (const nearby of [...enemies]) if (nearby !== enemy && nearby.mesh.position.distanceTo(b.mesh.position) < 10) hitEnemy(nearby, 3); }
-          break;
+      let impactT = obstacle?.t ?? Infinity, impactKind = obstacle ? 'world' : null, impactTarget = null;
+      if (b.hostile) {
+        const t = segmentSphereT(previous, b.mesh.position, bikeHitPoint, 1.5);
+        if (t !== null && t < impactT) { impactT = t; impactKind = 'bike'; }
+      } else {
+        for (const target of enemies) {
+          const t = segmentSphereT(previous, b.mesh.position, target.mesh.position, target.radius);
+          if (t !== null && t < impactT) { impactT = t; impactKind = 'enemy'; impactTarget = target; }
+        }
+        for (const target of mission.targets) {
+          if (target.health <= 0) continue;
+          const t = segmentSphereT(previous, b.mesh.position, target.mesh.position, 3);
+          if (t !== null && t < impactT) { impactT = t; impactKind = 'relay'; impactTarget = target; }
         }
       }
-      if (!b.hostile && b.life > 0) for (const relay of mission.targets) {
-        if (relay.health > 0 && segmentHit(previous, b.mesh.position, relay.mesh.position, 3)) {
-          b.life = 0; const destroyed = mission.hit(relay, b.missile ? 7 : 1); fx.hit(b.mesh.position);
-          if (destroyed) { fx.explode(relay.mesh.position, 2); state.score += 1000; announce('RELAY DISABLED / APPROACH TO RECOVER DATA'); sound.explosion(1.8); }
-          break;
+      if(impactKind) {
+        b.mesh.position.lerpVectors(previous,b.mesh.position,impactT); b.life=0;
+        if (impactKind === 'enemy' || impactKind === 'relay') hitConfirmUntil = elapsed + .18;
+        if(impactKind==='bike') damage(8);
+        else if(impactKind==='enemy') hitEnemy(impactTarget,b.missile?7:1);
+        else if(impactKind==='relay') {
+          const destroyed=mission.hit(impactTarget,b.missile?7:1);fx.hit(b.mesh.position);
+          if(destroyed){fx.explode(impactTarget.mesh.position,2);state.score+=1000;announce('RELAY DISABLED / APPROACH TO RECOVER DATA');sound.explosion(1.8);}
+        } else fx.hit(b.mesh.position);
+        if(b.missile) {
+          fx.explode(b.mesh.position,1.4);sound.explosion(.8);
+          for(const nearby of [...enemies]) if(nearby!==impactTarget && nearby.mesh.position.distanceTo(b.mesh.position)<10) hitEnemy(nearby,3);
         }
       }
       if (b.mesh.position.y < 0 || Math.abs(b.mesh.position.x) > 270 || Math.abs(b.mesh.position.z) > 270) b.life = 0;
@@ -274,41 +312,73 @@ function update(dt) {
     if (state.mode === 'playing' && missionState.complete && !state.freeRoam) { state.score += 5000; end(true); }
     if (!enemies.length) { spawnTimer += dt; if (spawnTimer > 25) { state.wave++; state.health = Math.min(100, state.health + 15); state.missiles = Math.min(12, state.missiles + 2); spawnWave(); spawnTimer = 0; } }
   }
-  sunlight.position.set(bike.position.x - 100, bike.position.y + 150, bike.position.z - 120); sunlight.target.position.copy(bike.position);
-  updateCamera(dt);
   state.x = bike.position.x; state.y = bike.position.y; state.z = bike.position.z; state.speed = speed; state.heading = heading; state.enemies = enemies.length;
-  sound.update({ speed, boosting: state.boosted, mode: state.mode }, dt);
+}
+let lastNotice = '', lastAudioMode = '';
+function present(dt) {
+  const paused = state.mode === 'paused';
+  if (!paused) {
+    world.update(dt, elapsed, bike.position);
+    for (const enemy of enemies) enemy.mesh.userData.update?.(dt, enemy.charge || 0, enemy.flash > 0);
+    updateCamera(dt);
+    sunlight.position.set(bike.position.x - 100, bike.position.y + 150, bike.position.z - 120); sunlight.target.position.copy(bike.position);
+    fx.update(dt, camera);
+  }
+  const notice = noticeTimer > 0 ? $('notice').textContent : state.autopilot && state.mode === 'playing' ? 'AUTONOMOUS COMBAT SORTIE' : '';
+  if (notice !== lastNotice) { $('notice').textContent = notice; lastNotice = notice; }
+  if (!paused || lastAudioMode !== state.mode) sound.update({ speed, boosting: state.boosted, mode: state.mode }, dt);
+  lastAudioMode = state.mode;
   uiTimer -= dt; if (uiTimer <= 0) { hud(); uiTimer = .1; }
 }
+const cameraForward = new THREE.Vector3(), cameraTarget = new THREE.Vector3(), cameraOrigin = new THREE.Vector3(), cameraLook = new THREE.Vector3();
 function updateCamera(dt) {
   if (state.mode === 'menu') {
     bike.position.set(3, 12, 40); bike.rotation.y = -.65;
     camera.position.set(10 + Math.sin(elapsed * .12) * .6, 15, 47); camera.lookAt(-1, 13.3, 39); return;
   }
-  const forward = new THREE.Vector3(-Math.sin(heading), 0, -Math.cos(heading));
-  const target = bike.position.clone();
+  const forward = cameraForward.set(-Math.sin(heading), 0, -Math.cos(heading));
+  const target = cameraTarget.copy(bike.position);
   if (state.camera === 'cockpit') { target.addScaledVector(forward, .3); target.y += 2.05; bike.visible = false; }
   else { target.addScaledVector(forward, state.camera === 'tactical' ? -19 : -9.5); target.y += state.camera === 'tactical' ? 18 : 4.4; bike.visible = true; }
-  const cameraOrigin = bike.position.clone().add(new THREE.Vector3(0, 2, 0));
+  cameraOrigin.copy(bike.position); cameraOrigin.y += 2;
   const cameraBlock = world.segmentHit(cameraOrigin, target);
-  if (cameraBlock) target.copy(cameraOrigin).lerp(new THREE.Vector3(cameraBlock.x, cameraBlock.y, cameraBlock.z), .85);
+  if (cameraBlock) target.copy(cameraOrigin).lerp(cameraLook.set(cameraBlock.x, cameraBlock.y, cameraBlock.z), .85);
   camera.position.lerp(target, 1 - Math.exp(-dt * (state.camera === 'cockpit' ? 25 : 7)));
-  camera.position.y += (random() - .5) * cameraShake;
-  const look = bike.position.clone().addScaledVector(forward, state.camera === 'cockpit' ? 40 : 13); look.y += state.camera === 'cockpit' ? 2.05 : 1.5;
-  camera.lookAt(look); camera.fov = THREE.MathUtils.damp(camera.fov, state.boosted ? 77 : state.camera === 'cockpit' ? 75 : 62, 4, dt); camera.updateProjectionMatrix();
+  // Cosmetic shake must not advance deterministic combat randomness.
+  if (cameraShake > .001) camera.position.y += (Math.random() - .5) * cameraShake;
+  const look = cameraLook.copy(bike.position).addScaledVector(forward, state.camera === 'cockpit' ? 40 : 13); look.y += state.camera === 'cockpit' ? 2.05 : 1.5;
+  camera.lookAt(look);
+  const wantedFov = state.boosted ? 77 : state.camera === 'cockpit' ? 75 : 62;
+  if (Math.abs(camera.fov - wantedFov) > .01) { camera.fov = THREE.MathUtils.damp(camera.fov, wantedFov, 4, dt); camera.updateProjectionMatrix(); }
 }
 const radar = $('radar').getContext('2d');
 function hud() {
   document.body.dataset.mode = state.mode;
+  const pauseMenu = $('pause-menu');
+  if (pauseMenu) {
+    const wasHidden = pauseMenu.hidden;
+    pauseMenu.hidden = state.mode !== 'paused' || tacticalMap.visible;
+    if (wasHidden && !pauseMenu.hidden && document.hasFocus()) $('resume-game').focus({ preventScroll: true });
+  }
   state.quality = graphics.quality; world.setQuality?.(state.quality.tier);
-  $('quality-status').textContent = `${state.fps || '—'} FPS / ${Math.round(state.quality.scale*100)}%`;
+  $('reticle').classList.toggle('confirmed', elapsed < hitConfirmUntil);
+  $('quality-status').textContent = `${state.mode === 'paused' ? 'PAUSED' : `${state.fps || '—'} FPS`} / ${Math.round(state.quality.scale*100)}%`;
+  $('pause-toggle').textContent = state.mode === 'paused' ? '▶' : 'Ⅱ';
+  $('pause-toggle').setAttribute('aria-pressed', String(state.mode === 'paused'));
+  $('pause-toggle').setAttribute('aria-label', state.mode === 'paused' ? 'Resume game' : 'Pause game');
   $('quality-select').value = state.quality.mode;
-  state.targets = enemies.map(e => ({ health: e.health, type: e.type, x: e.mesh.position.x, y: e.mesh.position.y, z: e.mesh.position.z, cooldown: e.cooldown }));
+  state.targets = enemies.map(e => ({ health: e.health, type: e.type, x: e.mesh.position.x, y: e.mesh.position.y, z: e.mesh.position.z, cooldown: e.cooldown, charge: e.charge || 0, firing: e.flash > 0 }));
   state.projectiles = { hostile: bullets.filter(b => b.hostile && b.life > 0).length, missiles: bullets.filter(b => b.missile && b.life > 0).length };
   const missionInfo = mission.snapshot();
-  const navMission = state.autopilot && autoObjective >= 0 && !mission.targets[autoObjective].recovered ? { ...missionInfo, targetPosition: mission.targets[autoObjective].position, phase: mission.targets[autoObjective].destroyed ? 'recover' : 'destroy' } : missionInfo;
-  navigation.update({ bikePosition: bike.position, heading, mission: navMission, enemies, mode: state.mode });
-  $('mission').textContent = `${missionInfo.recovered}/3 INTEL · ${missionInfo.objectiveText}`;
+  const autoTarget = state.autopilot && autoObjective >= 0 ? mission.targets[autoObjective] : null;
+  const navMission = autoTarget && !autoTarget.recovered ? {
+    ...missionInfo, targetPosition: autoTarget.position, phase: autoTarget.destroyed ? 'recover' : 'destroy',
+    objectiveText: autoTarget.destroyed ? `RECOVER ${autoTarget.label} / APPROACH CACHE` : `DISABLE ${autoTarget.label} / CANNON OR MISSILES`,
+  } : missionInfo;
+  const missileLock = nearestTarget(.95, 220);
+  state.lock = missileLock ? { label: missileLock.target.label || missileLock.target.type, distance: missileLock.distance, x: missileLock.target.mesh.position.x, y: missileLock.target.mesh.position.y, z: missileLock.target.mesh.position.z } : null;
+  navigation.update({ bikePosition: bike.position, heading, mission: navMission, lock: missileLock, mode: state.mode });
+  $('mission').textContent = `${missionInfo.recovered}/3 INTEL · ${navMission.objectiveText}`;
   $('score').textContent = String(state.score).padStart(6, '0'); $('wave').textContent = String(state.wave).padStart(2, '0'); $('hunters').textContent = `${enemies.length} HOSTILES`;
   $('health').style.width = `${state.health}%`; $('health-text').textContent = `${state.health}%`; $('boost').style.width = `${state.energy}%`; $('boost-text').textContent = state.energy > 20 ? 'READY' : 'RECHARGING';
   $('speed').textContent = String(Math.round(Math.abs(speed) * 5)).padStart(3, '0'); $('telemetry').querySelector('h2').textContent = world.districtAt?.(bike.position.x, bike.position.z) || 'SHADOW SECTOR';
@@ -322,19 +392,35 @@ function hud() {
   for (const p of pickups) { radar.fillStyle = '#baca91'; radar.fillRect(83 + p.mesh.position.x * scale, 83 + p.mesh.position.z * scale, 4, 4); }
   radar.save(); radar.translate(85 + bike.position.x * scale, 85 + bike.position.z * scale); radar.rotate(-heading); radar.fillStyle = '#e5e3b4'; radar.beginPath(); radar.moveTo(0, -5); radar.lineTo(-4, 4); radar.lineTo(4, 4); radar.fill(); radar.restore();
 }
+// Set the hangar camera before the first render, including slow GPU startup.
+present(0);
 let last = performance.now(), accumulator = 0, fpsTime = 0, fpsFrames = 0;
+renderer.info.autoReset = false;
 renderer.setAnimationLoop(now => {
   const rawDt = (now - last) / 1000, dt = Math.min(rawDt, .1); last = now;
+  if (document.hidden) { accumulator = 0; return; }
   const updateStart = performance.now();
-  accumulator += dt;
-  while (accumulator >= 1 / 60) { if (state.mode !== 'paused') update(1 / 60); accumulator -= 1 / 60; }
-  if (state.mode === 'paused') sound.update({ speed: 0, boosting: false, mode: 'paused' }, dt);
-  const updateMs = performance.now()-updateStart;
+  let simulationSteps = 0;
+  if (state.mode !== 'paused') {
+    accumulator += dt;
+    while (accumulator >= 1 / 60) { update(1 / 60); accumulator -= 1 / 60; simulationSteps++; }
+  } else accumulator = 0;
+  const simulationMs = performance.now() - updateStart;
+  present(dt);
+  const presentationMs = performance.now() - updateStart - simulationMs;
+  const qualityStart = performance.now();
   if (state.mode !== 'paused') graphics.updateQuality(rawDt);
+  const qualityMs = performance.now() - qualityStart;
   const renderStart = performance.now();
-  if (state.mode !== 'paused' || renderDirty) { graphics.render(); renderDirty=false; }
-  state.performance = { updateMs: Math.round(updateMs*10)/10, renderMs: Math.round((performance.now()-renderStart)*10)/10, drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
- state.frames++; state.ready = true; $('loading').hidden = true;
-  fpsTime += rawDt; fpsFrames++; if (fpsTime > 1) { state.fps = Math.round(fpsFrames / fpsTime); fpsTime = 0; fpsFrames = 0; }
+  const rendered = state.mode !== 'paused' || renderDirty;
+  if (rendered) { renderer.info.reset(); graphics.render(); renderDirty = false; }
+  state.performance = { updateMs: Math.round((simulationMs + presentationMs)*10)/10, simulationMs: Math.round(simulationMs*10)/10, presentationMs: Math.round(presentationMs*10)/10, qualityMs: Math.round(qualityMs*10)/10, renderMs: Math.round((performance.now()-renderStart)*10)/10, simulationSteps, rendered, gpu: graphics.gpuTiming, drawCalls: rendered ? renderer.info.render.drawCalls ?? renderer.info.render.calls : 0, triangles: rendered ? renderer.info.render.triangles : 0 };
+  state.frames++; state.ready = true; $('loading').hidden = true;
+  fpsTime += rawDt; if (rendered) fpsFrames++;
+  if (fpsTime > 1) { state.fps = Math.round(fpsFrames / fpsTime); fpsTime = 0; fpsFrames = 0; }
 });
-addEventListener('resize', () => { renderDirty=true; graphics.resize(); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+addEventListener('visibilitychange', () => {
+  if (document.hidden) { keys.clear(); if (state.mode === 'playing') state.mode = 'paused'; sound.update({ mode: 'paused' }); }
+  last = performance.now(); accumulator = 0; renderDirty = true; uiTimer = 0;
+});
+addEventListener('resize', () => { renderDirty = true; graphics.resize(); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });

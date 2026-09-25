@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Excite Bike 3D</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="hud" hidden>
+      <div class="tl">
+        <div id="place" class="place">1<sup>st</sup></div>
+        <div id="timer" class="timer">0:00.00</div>
+      </div>
+      <div class="tr"><span id="speed">0</span><small>km/h</small></div>
+      <div class="bottom">
+        <div class="temp"><label>TEMP</label><div class="bar"><div id="heat"></div></div></div>
+        <div class="progress" id="progress"></div>
+      </div>
+      <div id="stats" class="stats"></div>
+    </div>
+    <div id="callout" class="callout"></div>
+    <div id="title" class="screen">
+      <h1>EXCITE<span>BIKE</span><em>3D</em></h1>
+      <p class="blink">PRESS ENTER TO RACE</p>
+      <div class="controls">
+        <div><kbd>Z</kbd>/<kbd>Space</kbd> throttle</div>
+        <div><kbd>X</kbd>/<kbd>Shift</kbd> turbo (watch TEMP!)</div>
+        <div><kbd>↑</kbd><kbd>↓</kbd> change lanes</div>
+        <div><kbd>←</kbd><kbd>→</kbd> lean back / forward in the air</div>
+        <div><kbd>P</kbd> autopilot · <kbd>M</kbd> mute</div>
+      </div>
+      <p class="tip">Land matching the ground angle for a PERFECT speed boost. Blue arrows cool your engine.</p>
+    </div>
+    <div id="results" class="screen" hidden></div>
+    <a class="back" href="/">← hub</a>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

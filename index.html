@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI App Lab</title>
+    <style>
+      :root { --bg: #07070d; --card: #11111c; --line: #25253a; --text: #eef; --dim: #99a; --accent: #00e5ff; --pink: #ff2d95; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: radial-gradient(1200px 600px at 20% -10%, #1b1040, transparent), radial-gradient(900px 500px at 110% 10%, #002b36, transparent), var(--bg);
+        color: var(--text); font-family: system-ui, -apple-system, sans-serif; padding: 48px 24px; }
+      main { max-width: 1100px; margin: 0 auto; }
+      h1 { font-size: clamp(2.2rem, 6vw, 4rem); margin: 0 0 8px; letter-spacing: -0.03em;
+        background: linear-gradient(90deg, var(--pink), #7c4dff, var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      p.lead { color: var(--dim); font-size: 1.1rem; margin: 0 0 40px; }
+      code { background: #1a1a2a; padding: 2px 6px; border-radius: 4px; color: var(--accent); }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+      a.card { display: block; padding: 22px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); color: inherit; text-decoration: none;
+        transition: transform .15s, border-color .15s, box-shadow .15s; }
+      a.card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 10px 40px rgba(0,229,255,.15); }
+      .emoji { font-size: 2rem; }
+      .card h2 { margin: 10px 0 6px; font-size: 1.2rem; }
+      .card p { margin: 0; color: var(--dim); font-size: .95rem; line-height: 1.4; }
+      .slug { margin-top: 12px; font-size: .8rem; color: #667; font-family: ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>AI App Lab</h1>
+      <p class="lead">Prompt it. Watch Claude build it and test it in a live browser. Every folder in <code>apps/</code> shows up here.</p>
+      <div class="grid" id="apps"></div>
+    </main>
+    <script type="module">
+      // Loaded as raw text so one app's broken meta.json can't take down the hub.
+      const metas = import.meta.glob('./apps/*/meta.json', { eager: true, query: '?raw', import: 'default' });
+      const parse = (txt) => { try { return JSON.parse(txt); } catch { return { description: '⚠ meta.json is not valid JSON' }; } };
+      const cards = Object.entries(metas)
+        .map(([path, txt]) => { const slug = path.split('/')[2]; return { slug, title: slug, ...parse(txt) }; })
+        .sort((a, b) => (a.slug === '_template') - (b.slug === '_template') || a.slug.localeCompare(b.slug));
+      document.getElementById('apps').innerHTML = cards.map((a) => `
+        <a class="card" href="/apps/${a.slug}/" data-slug="${a.slug}">
+          <div class="emoji">${a.emoji ?? '🧪'}</div>
+          <h2>${a.title}</h2>
+          <p>${a.description ?? ''}</p>
+          <div class="slug">apps/${a.slug}</div>
+        </a>`).join('');
+    </script>
+  </body>
+</html>

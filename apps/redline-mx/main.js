@@ -1,10 +1,29 @@
 import * as THREE from 'three';
-import { buildTrack, LANES, START_X, FINISH_X } from './track.js';
+import { buildTrack, LANES, START_X, FINISH_X, TRACK_HALF_WIDTH } from './track.js';
+import { biomeById } from './biomes.js';
+import { mulberry32 } from './rng.js';
+import { createScenery } from './scenery.js';
+import { createSpectators } from './spectators.js';
+import { createWildlife } from './wildlife.js';
+import { createWeather } from './weather.js';
 import { buildWorld } from './world.js';
-import { buildBike, WHEEL_R, WHEELBASE } from './bike.js';
-import { Rider, G } from './rider.js';
+import { buildBike, WHEEL_R, WHEELBASE } from './bikes.js';
+import { Rider } from './rider.js';
+import { createItems } from './items.js';
 import { createAudio } from './audio.js';
 import { setupTouch } from './touch.js';
+import { createGarage } from './garage.js';
+import { BIKES, ITEM_INFO, bikeById, statsFor, loadSave, writeSave, payout } from './progression.js';
+
+// ---------- save + world selection ----------
+const params = new URLSearchParams(location.search);
+const save = loadSave();
+if (params.get('biome')) save.biome = params.get('biome');
+if (params.get('bike') && bikeById(params.get('bike')).id === params.get('bike')) {
+  if (!save.owned.includes(params.get('bike'))) save.owned.push(params.get('bike')); // ?bike= for demos/tests
+  save.bike = params.get('bike');
+}
+const biome = biomeById(save.biome);
 
 // ---------- renderer / scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -17,26 +36,58 @@ document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 400);
-const track = buildTrack(7);
-const world = buildWorld(scene, track);
+const track = buildTrack(biome.seed);
+const world = buildWorld(scene, track, biome);
+const ctx = { THREE, scene, camera, renderer, biome, track, LANES, START_X, FINISH_X, TRACK_HALF_WIDTH, rng: mulberry32(biome.seed * 977) };
+// ?off=scenery,spectators,… disables modules (for profiling).
+const off = new Set((params.get('off') || '').split(','));
+const stub = { update() {}, dispose() {} };
+const weather = off.has('weather') ? stub : createWeather(ctx);
+const modules = [
+  off.has('scenery') ? stub : createScenery(ctx),
+  off.has('spectators') ? stub : createSpectators(ctx),
+  off.has('wildlife') ? stub : createWildlife(ctx),
+  weather,
+];
+const items = createItems(ctx);
+const focus = { x: 0, y: 0, z: 0, speed: 0, airborne: false, excitement: 0, riders: [], cameraX: 0 };
 const audio = createAudio();
 
+// Shared by every rider; weather writes grip & wind into it each frame.
+const env = { gravity: biome.physics.gravity, heatMul: biome.physics.heat, patch: biome.patch, weatherGrip: 1, wind: 0 };
+
 // ---------- riders ----------
+const playerBike = bikeById(save.bike);
 const ROSTER = [
-  { lane: 2, color: '#ff3b3b', num: '1', name: 'YOU', max: 32, turbo: 44 },
-  { lane: 0, color: '#3b7bff', num: '7', name: 'BLU', max: 30.5, turbo: 41 },
-  { lane: 1, color: '#2ecc71', num: '3', name: 'GRN', max: 31, turbo: 42 },
-  { lane: 3, color: '#ff9f1a', num: '5', name: 'ORG', max: 29.5, turbo: 41 },
+  { lane: 2, color: '#ff3b3b', num: '1', name: 'YOU', bike: playerBike.id },
+  { lane: 0, color: '#3b7bff', num: '7', name: 'BLU', bike: 'sport', max: 30.5, turbo: 41 },
+  { lane: 1, color: '#2ecc71', num: '3', name: 'GRN', bike: 'chopper', max: 31, turbo: 42 },
+  { lane: 3, color: '#ff9f1a', num: '5', name: 'ORG', bike: 'hover', max: 29.5, turbo: 41 },
 ];
-const riders = ROSTER.map((r) => {
-  const rider = new Rider(track, r.lane, { maxSpeed: r.max, turboSpeed: r.turbo, name: r.name });
+const riders = ROSTER.map((r, i) => {
+  const stats = i === 0 ? statsFor(save, r.bike) : { ...bikeById(r.bike).stats, maxSpeed: r.max, turboSpeed: r.turbo, grip: 0.8, crashAngle: 0.9, spin: 1 };
+  const rider = new Rider(track, r.lane, { stats, env, name: r.name });
   rider.color = r.color;
-  rider.mesh = buildBike(r.color, r.num);
+  rider.bikeId = r.bike;
+  rider.mesh = buildBike(r.bike, r.color, r.num);
   scene.add(rider.mesh.root);
   return rider;
 });
 const player = riders[0];
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+// Effect visuals on the player bike.
+const shieldBubble = new THREE.Mesh(
+  new THREE.IcosahedronGeometry(1.9, 2),
+  new THREE.MeshBasicMaterial({ color: '#00e5ff', transparent: true, opacity: 0.18, depthWrite: false })
+);
+shieldBubble.position.y = 1.1;
+const aura = new THREE.Mesh(
+  new THREE.SphereGeometry(2.2, 20, 12),
+  new THREE.MeshBasicMaterial({ color: '#b388ff', transparent: true, opacity: 0.0, depthWrite: false, blending: THREE.AdditiveBlending })
+);
+aura.position.y = 1.1;
+player.mesh.root.add(shieldBubble, aura);
 
 // ---------- input ----------
 const keys = new Set();
@@ -46,15 +97,20 @@ addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   audio.start();
   if (e.repeat) return;
-  keys.add(e.key.toLowerCase());
+  const k = e.key.toLowerCase();
+  keys.add(k);
   if (e.key === 'ArrowUp') laneQueue -= 1;
   if (e.key === 'ArrowDown') laneQueue += 1;
-  if (e.key === 'Enter' && (state === 'title' || state === 'finished')) startRace();
-  if (e.key.toLowerCase() === 'p') {
+  if (e.key === 'Enter') {
+    if (state === 'title' || state === 'finished') openGarage();
+    else if (state === 'garage') raceFromGarage();
+  }
+  if (k === 'c') useAbility();
+  if (k === 'p') {
     autopilot = !autopilot;
     callout(autopilot ? 'AUTOPILOT' : 'MANUAL', 'blue', 900);
   }
-  if (e.key.toLowerCase() === 'm') audio.toggleMute();
+  if (k === 'm') audio.toggleMute();
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
@@ -76,7 +132,7 @@ function predictLanding(r) {
   if (!r.airborne) return { x: r.x, slope: track.slope(r.x + 2) };
   let { x, y, vx, vy } = r;
   for (let i = 0; i < 150; i++) {
-    vy -= G * 0.02;
+    vy -= env.gravity * 0.02;
     x += vx * 0.02;
     y += vy * 0.02;
     if (y <= track.height(x)) break;
@@ -96,7 +152,7 @@ function aiInput(r, skill) {
   const lane = r.lane;
   const blocked = (l) =>
     riders.some((o) => o !== r && o.lane === l && o.x > r.x - 1 && o.x - r.x < 9 && (o.speed < r.speed || o.crashed)) ||
-    (skill > 0.5 && track.inMud(r.x + 8, l));
+    (skill > 0.5 && track.inMud(r.x + 8, l) && r.stats.grip > 0.5);
   if (blocked(lane)) {
     const options = [lane - 1, lane + 1].filter((l) => l >= 0 && l < 4 && !blocked(l));
     if (options.length) input.laneDelta = options[0] - lane;
@@ -107,7 +163,12 @@ function aiInput(r, skill) {
 
 // ---------- HUD ----------
 const $ = (id) => document.getElementById(id);
-const hud = { tempLabel: document.querySelector('.temp label'), root: $('hud'), place: $('place'), timer: $('timer'), speed: $('speed'), heat: $('heat'), stats: $('stats'), progress: $('progress') };
+const hud = {
+  tempLabel: document.querySelector('.temp label'), root: $('hud'), place: $('place'), timer: $('timer'), speed: $('speed'),
+  heat: $('heat'), stats: $('stats'), progress: $('progress'), coins: $('race-coins'), ability: $('ability'),
+  abilityFill: $('ability-fill'), abilityName: $('ability-name'), effects: $('effects'),
+};
+hud.abilityName.textContent = playerBike.ability.name;
 hud.dots = riders.map((r, i) => {
   const d = document.createElement('i');
   d.style.background = r.color;
@@ -123,6 +184,15 @@ function callout(text, cls = '', ms = 800) {
   clearTimeout(calloutTimer);
   calloutTimer = setTimeout(() => (el.className = 'callout'), ms);
 }
+function pickupToast(kind) {
+  const info = ITEM_INFO[kind];
+  const t = document.createElement('div');
+  t.className = 'pickup';
+  t.textContent = info.label;
+  t.style.color = info.color;
+  $('pickups').appendChild(t);
+  setTimeout(() => t.remove(), 900);
+}
 const ordinal = (n) => ['1<sup>st</sup>', '2<sup>nd</sup>', '3<sup>rd</sup>', '4<sup>th</sup>'][n - 1];
 const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
 
@@ -132,6 +202,32 @@ let countdown = 0;
 let raceTime = 0;
 let shake = 0;
 let placeNow = 1;
+let raceCoins = 0;
+let ability = 0; // 0..100
+let abilityUses = 0;
+let lastPayout = 0;
+let newRecord = false;
+
+const garage = createGarage($('garage'), save, { onRace: () => raceFromGarage() });
+
+function openGarage() {
+  state = 'garage';
+  $('title').hidden = true;
+  $('results').hidden = true;
+  hud.root.hidden = true;
+  garage.show();
+}
+
+function raceFromGarage() {
+  writeSave(save);
+  // Changing world or bike rebuilds the scene, so reload into the race.
+  if (save.biome !== biome.id || save.bike !== playerBike.id) {
+    location.search = `?race${autopilot ? '&autostart' : ''}`;
+    return;
+  }
+  garage.hide();
+  startRace();
+}
 
 function startRace() {
   riders.forEach((r, i) => {
@@ -139,12 +235,18 @@ function startRace() {
     r.z = LANES[r.lane];
     r.reset(START_X - 3);
   });
+  player.shields = playerBike.stats.shields || 0;
+  items.reset();
+  raceCoins = 0;
+  ability = 0;
+  abilityUses = 0;
   laneQueue = 0;
   raceTime = 0;
   countdown = 3;
   state = 'countdown';
   $('title').hidden = true;
   $('results').hidden = true;
+  garage.hide();
   hud.root.hidden = false;
   callout('3', 'gold', 700);
   audio.beep(false);
@@ -159,22 +261,72 @@ function standings() {
   });
 }
 
-const BEST_KEY = 'redline-mx.best';
-const readBest = () => { try { return +localStorage.getItem(BEST_KEY) || null; } catch { return null; } };
-let best = readBest();
-let newRecord = false;
-
 function showResults() {
   const rows = standings()
-    .map((r, i) => `<tr class="${r === player ? 'me' : ''}"><td>${i + 1}.</td><td>${r.name}</td><td>${r.finishTime != null ? fmt(r.finishTime) : '--'}</td></tr>`)
+    .map((r, i) => `<tr class="${r === player ? 'me' : ''}"><td>${i + 1}.</td><td>${r.name}</td><td>${bikeById(r.bikeId).name}</td><td>${r.finishTime != null ? fmt(r.finishTime) : '--'}</td></tr>`)
     .join('');
   const el = $('results');
   el.className = 'screen results';
+  const best = save.best[biome.id];
   el.innerHTML = `<h2>${placeNow === 1 ? 'YOU WIN!' : 'FINISH!'}</h2><table>${rows}</table>
     <p class="record">${newRecord ? '★ NEW RECORD ★' : best ? `best ${fmt(best)}` : ''}</p>
-    <p>jumps ${player.jumps} · perfect landings ${player.perfects} · flips ${player.flips} · crashes ${player.crashes} · overheats ${player.overheats}</p>
-    <p class="blink">PRESS ENTER TO RACE AGAIN</p>`;
+    <p class="payout">+◉ ${lastPayout} <small>(${raceCoins} coins · ${player.flips} flips · ${player.perfects} perfect · ${player.crashes} crashes)</small></p>
+    <p class="blink">PRESS ENTER FOR THE GARAGE</p>`;
   el.hidden = false;
+}
+
+function finishRace() {
+  state = 'finished';
+  placeNow = standings().indexOf(player) + 1;
+  const prev = save.best[biome.id];
+  newRecord = !prev || player.finishTime < prev;
+  if (newRecord) save.best[biome.id] = player.finishTime;
+  lastPayout = payout({ place: placeNow, coins: raceCoins, flips: player.flips, perfects: player.perfects, crashes: player.crashes });
+  save.coins += lastPayout;
+  save.races += 1;
+  writeSave(save);
+  callout('FINISH!', 'gold', 1500);
+  world.celebrate(FINISH_X, player.y + 3, 260);
+  setTimeout(showResults, 1200);
+}
+
+// ---------- abilities & items ----------
+const charge = (n) => {
+  const was = ability;
+  ability = Math.min(100, ability + n);
+  if (was < 100 && ability >= 100) callout(`${playerBike.ability.name} READY — C`, 'blue', 900);
+};
+
+function useAbility(events = []) {
+  if (state !== 'racing' || ability < 100 || player.crashed) return false;
+  ability = 0;
+  abilityUses += 1;
+  const id = playerBike.ability.id;
+  callout(playerBike.ability.name + '!', 'blue', 900);
+  audio.perfect();
+  if (id === 'hop') player.hop(20);
+  else if (id === 'shockwave') {
+    shake = 1;
+    for (let i = 0; i < 40; i++) world.puff(player.x + (Math.random() - 0.5) * 30, player.y, (Math.random() - 0.5) * 12, 3);
+    for (const r of riders) if (r !== player && Math.abs(r.x - player.x) < 30) { r.vy = 10; r.crash(events); }
+  } else if (id === 'slipstream') player.give('slipstream', 4);
+  else if (id === 'phase') player.give('phase', 5);
+  else if (id === 'overdrive') player.give('overdrive', 6);
+  else if (id === 'afterburner') player.give('afterburner', 2.5);
+  handleEvents(events);
+  return true;
+}
+
+function applyItem(kind) {
+  pickupToast(kind);
+  if (kind === 'coin') { raceCoins += 1; charge(3); audio.beep(true); return; }
+  audio.perfect();
+  if (kind === 'nitro') player.give('nitro', 1.6);
+  else if (kind === 'shield') player.shields = Math.min(3, player.shields + 1);
+  else if (kind === 'ice') player.heat = 0;
+  else if (kind === 'magnet') player.give('magnet', 8);
+  else if (kind === 'rocket') player.hop(16);
+  else if (kind === 'star') charge(50);
 }
 
 function handleEvents(events) {
@@ -184,6 +336,9 @@ function handleEvents(events) {
     if (e.type === 'crash') {
       for (let i = 0; i < 25; i++) world.puff(r.x, r.y, r.z, 2);
       if (me) { callout('CRASH!', 'red', 1100); shake = 0.8; audio.crash(); }
+    } else if (e.type === 'shield' && me) {
+      callout('SHIELD SAVED YOU!', 'blue', 1000);
+      audio.land();
     } else if (e.type === 'land') {
       for (let i = 0; i < 8; i++) world.puff(r.x - 0.9, r.y, r.z, 1.2);
       if (me) {
@@ -194,7 +349,8 @@ function handleEvents(events) {
           callout(e.flips > 1 ? `${e.flips}× ${name}!` : `${name}!`, 'blue', 1100);
           audio.perfect();
           world.celebrate(r.x, r.y + 2, 40);
-        } else if (e.perfect) { callout('PERFECT!', 'gold', 700); audio.perfect(); }
+          charge(40 * e.flips);
+        } else if (e.perfect) { callout('PERFECT!', 'gold', 700); audio.perfect(); charge(25); }
       }
     } else if (e.type === 'overheat' && me) {
       callout('OVERHEAT!', 'red', 1500);
@@ -206,9 +362,11 @@ function handleEvents(events) {
 // ---------- simulation ----------
 const STEP = 1 / 120;
 let acc = 0;
+let simTime = 0;
 
 function simulate(dt) {
   const events = [];
+  simTime += dt;
   if (state === 'countdown') {
     const before = Math.ceil(countdown);
     countdown -= dt;
@@ -221,6 +379,8 @@ function simulate(dt) {
   }
   if (state !== 'racing' && state !== 'finished') return;
   raceTime += dt;
+  env.weatherGrip = weather.grip ?? 1;
+  env.wind = weather.wind ?? 0;
 
   for (const r of riders) {
     let input;
@@ -229,10 +389,15 @@ function simulate(dt) {
     r.update(dt, input, events);
     if (r.finishTime == null && r.x >= FINISH_X) r.finishTime = raceTime;
   }
+  if (state === 'racing') {
+    charge(dt * 2);
+    if (autopilot && ability >= 100) useAbility(events);
+    for (const kind of items.update(dt, simTime, player)) applyItem(kind);
+  }
 
   // Clip another rider's back wheel in your lane and you go down.
   for (const a of riders) for (const b of riders) {
-    if (a === b || a.crashed || b.crashed || a.airborne || b.airborne) continue;
+    if (a === b || a.crashed || b.crashed || a.airborne || b.airborne || a.has('phase') || b.has('phase')) continue;
     if (Math.abs(a.z - b.z) < 1.2 && b.x - a.x > 0 && b.x - a.x < WHEELBASE && a.speed > b.speed + 1) {
       a.vy = 6;
       a.crash(events);
@@ -240,18 +405,7 @@ function simulate(dt) {
   }
   handleEvents(events);
 
-  if (state === 'racing' && player.finishTime != null) {
-    state = 'finished';
-    placeNow = standings().indexOf(player) + 1;
-    newRecord = !best || player.finishTime < best;
-    if (newRecord) {
-      best = player.finishTime;
-      try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
-    }
-    callout('FINISH!', 'gold', 1500);
-    world.celebrate(FINISH_X, player.y + 3, 260);
-    setTimeout(showResults, 1200);
-  }
+  if (state === 'racing' && player.finishTime != null) finishRace();
 }
 
 // ---------- render ----------
@@ -263,7 +417,7 @@ const camPos = new THREE.Vector3(0, 6, 22);
 const camLook = new THREE.Vector3();
 const timer = new THREE.Timer();
 
-function renderRiders(dt) {
+function renderRiders(dt, t) {
   for (const r of riders) {
     const m = r.mesh;
     const lift = r.crashed ? 0.6 : Math.sin(r.wheelie) * WHEELBASE * 0.5;
@@ -273,13 +427,19 @@ function renderRiders(dt) {
     m.rear.rotation.z -= spin;
     m.front.rotation.z -= spin;
     m.rider.rotation.z += ((r.airborne ? -r.lean * 0.35 : -0.05) - m.rider.rotation.z) * Math.min(1, dt * 10);
-    m.flame.visible = r.turbo && !r.crashed;
-    if (m.flame.visible) m.flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
+    const boosting = r.has('nitro') || r.has('afterburner') || r.has('slipstream');
+    m.flame.visible = (r.turbo || boosting) && !r.crashed;
+    if (m.flame.visible) m.flame.scale.set(boosting ? 1.8 : 1, (boosting ? 1.6 : 0.7) + Math.random() * 0.6, boosting ? 1.8 : 1);
+    m.root.visible = !r.has('phase') || Math.floor(t * 20) % 2 === 0;
     if (!r.airborne && !r.crashed && r.throttle && r.speed > 3 && Math.random() < 0.6) {
-      const mud = track.inMud(r.x, r.lane);
-      world.puff(r.x - WHEELBASE / 2 - 0.3, r.y, r.z, r.speed / 30, mud ? '#6b4a2b' : null);
+      world.puff(r.x - WHEELBASE / 2 - 0.3, r.y, r.z, r.speed / 30, r.patch ? biome.mud : null);
     }
   }
+  shieldBubble.visible = player.shields > 0 && !player.crashed;
+  shieldBubble.rotation.y += dt;
+  const auraOn = player.has('overdrive') || player.has('slipstream') || player.has('phase');
+  aura.material.opacity += ((auraOn ? 0.25 : 0) - aura.material.opacity) * Math.min(1, dt * 6);
+  aura.material.color.set(player.has('overdrive') ? '#ff8a00' : player.has('phase') ? '#b388ff' : '#00e5ff');
 }
 
 function renderHUD() {
@@ -293,6 +453,12 @@ function renderHUD() {
   hud.heat.parentElement.parentElement.classList.toggle('hot', hot);
   hud.tempLabel.textContent = hot ? 'REDLINE' : 'TEMP';
   riders.forEach((r, i) => (hud.dots[i].style.left = `${Math.min(100, Math.max(0, ((r.x - START_X) / (FINISH_X - START_X)) * 100))}%`));
+  hud.coins.textContent = `◉ ${raceCoins}`;
+  hud.abilityFill.style.width = `${ability}%`;
+  hud.ability.classList.toggle('ready', ability >= 100);
+  const fx = Object.entries(player.effects).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v.toFixed(1)}s`);
+  if (player.shields) fx.unshift(`shield ×${player.shields}`);
+  hud.effects.textContent = fx.join(' · ');
   hud.stats.innerHTML = `jumps ${player.jumps}<br>perfect ${player.perfects}<br>flips ${player.flips}<br>crashes ${player.crashes}<br>air ${player.maxAir.toFixed(2)}s${autopilot ? '<br><b style="color:#6cf">AUTOPILOT</b>' : ''}`;
 }
 
@@ -301,15 +467,21 @@ function frame(now) {
   const dt = Math.min(timer.getDelta(), 1 / 20);
   acc += dt;
   while (acc >= STEP) { simulate(STEP); acc -= STEP; }
+  const t = timer.getElapsed();
 
-  renderRiders(dt);
+  renderRiders(dt, t);
   world.updateDust(dt);
   world.updateConfetti(dt);
-  const t = timer.getElapsed();
-  world.updateCrowd(t, player.x, player.airborne ? 1 : player.speed / 60);
+  if (state === 'title' || state === 'garage') items.update(dt, t, { x: START_X, y: 0, z: 99, has: () => false, crashed: true });
+  Object.assign(focus, {
+    x: player.x, y: player.y, z: player.z, speed: player.speed, airborne: player.airborne,
+    excitement: player.airborne ? 1 : Math.min(1, player.speed / 50), cameraX: camera.position.x,
+  });
+  focus.riders = riders.map((r) => ({ x: r.x, y: r.y, z: r.z, airborne: r.airborne }));
+  for (const m of modules) m.update(dt, t, focus);
 
-  // Side-on camera that leads the player, like the NES original but in 3D.
-  const idle = state === 'title';
+  // Side-on camera that leads the player.
+  const idle = state === 'title' || state === 'garage';
   const target = idle
     ? new THREE.Vector3(START_X + 8 + Math.sin(t * 0.3) * 6, 5, 20)
     : new THREE.Vector3(player.x + 3, player.y * 0.6 + 5.5, (21 + player.speed * 0.08) * zoomOut);
@@ -326,7 +498,7 @@ function frame(now) {
   world.sun.position.set(camLook.x - 20, 40, 30);
   world.sun.target.position.set(camLook.x, 0, 0);
 
-  if (state !== 'title') renderHUD();
+  if (state !== 'title' && state !== 'garage') renderHUD();
   audio.engine(player.speed, player.turbo, state === 'racing' || state === 'countdown');
   renderer.render(scene, camera);
   app.frames += 1;
@@ -349,26 +521,37 @@ const app = (window.__app = {
     return {
       ready: this.ready,
       frames: this.frames,
+      render: { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures },
       state,
+      biome: biome.id,
+      bike: playerBike.id,
       raceTime,
       autopilot,
-      best,
+      best: save.best[biome.id] ?? null,
       newRecord,
       finishX: FINISH_X,
       place: placeNow,
+      raceCoins,
+      bank: save.coins,
+      lastPayout,
+      ability,
+      abilityUses,
+      env: { ...env },
       player: {
-        x: p.x, y: p.y, lane: p.lane, speed: p.speed, heat: p.heat, pitch: wrap(p.pitch), flips: p.flips,
+        x: p.x, y: p.y, z: p.z, lane: p.lane, speed: p.speed, heat: p.heat, pitch: wrap(p.pitch), flips: p.flips,
         airborne: p.airborne, crashed: p.crashed, overheated: p.overheated,
         jumps: p.jumps, perfects: p.perfects, crashes: p.crashes, overheats: p.overheats,
         maxAir: p.maxAir, finishTime: p.finishTime, throttle: p.throttle, turbo: p.turbo,
-        airSpin: p.airSpin, airTime: p.airTime, vy: p.vy,
+        airSpin: p.airSpin, airTime: p.airTime, vy: p.vy, shields: p.shields,
+        effects: Object.fromEntries(Object.entries(p.effects).filter(([, v]) => v > 0)),
+        stats: p.stats, patch: !!p.patch,
       },
       landingSlope: predictLanding(p).slope,
       laneAhead: [0, 1, 2, 3].map((l) => ({
         mud: track.inMud(p.x + 8, l),
         rival: riders.some((o) => o !== p && o.lane === l && o.x > p.x - 1 && o.x - p.x < 9),
       })),
-      rivals: riders.slice(1).map((r) => ({ name: r.name, x: r.x, lane: r.lane, speed: r.speed, finishTime: r.finishTime })),
+      rivals: riders.slice(1).map((r) => ({ name: r.name, x: r.x, lane: r.lane, speed: r.speed, finishTime: r.finishTime, crashed: r.crashed })),
     };
   },
 });
@@ -380,14 +563,25 @@ app.debug = {
     mud: track.mud.map((m) => ({ x0: m.x0, x1: m.x1, lanes: [...m.lanes] })),
     coolers: track.coolers.map((c) => ({ ...c })),
   }),
+  items: () => items.items.map((it) => ({ kind: it.kind, x: it.x, lane: it.lane, lift: it.lift, taken: it.taken })),
   teleport(x, lane = player.lane, speed = 0) {
     Object.assign(player, { x, lane, z: LANES[lane], y: track.height(x), airborne: false, speed, pitch: track.slope(x), crashTimer: 0 });
     // Park the rivals behind so they don't interfere.
     riders.slice(1).forEach((r, i) => Object.assign(r, { x: x - 40 - i * 5, y: track.height(x - 40 - i * 5), airborne: false, speed: 0 }));
     laneQueue = 0;
   },
+  // Put a rival right in front of the player (for shockwave tests).
+  rivalAhead(dx = 8) {
+    const r = riders[1];
+    Object.assign(r, { x: player.x + dx, y: track.height(player.x + dx), airborne: false, crashTimer: 0 });
+  },
   setHeat(h) { player.heat = h; },
+  shield() { player.shields = Math.min(3, player.shields + 1); },
+  charge(n = 100) { charge(n); },
+  giveCoins(n) { save.coins += n; writeSave(save); garage.render(); },
 };
 
 setupTouch();
+if (params.has('autostart')) autopilot = true;
+if (params.has('race') || params.has('autostart')) startRace();
 renderer.setAnimationLoop(frame);

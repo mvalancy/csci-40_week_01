@@ -7,6 +7,7 @@ const BUTTONS = [
   { key: 'ArrowRight', label: '▶', cls: 'right' },
   { key: 'x', label: 'TURBO', cls: 'b' },
   { key: 'z', label: 'GAS', cls: 'a' },
+  { key: 'c', label: '⚡', cls: 'c' },
 ];
 
 const send = (type, key) => dispatchEvent(new KeyboardEvent(type, { key, bubbles: true }));

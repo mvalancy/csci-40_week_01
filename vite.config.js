@@ -30,7 +30,14 @@ export default defineConfig({
     rollupOptions: {
       input: {
         hub: resolve('index.html'),
-        ...Object.fromEntries(apps.map((a) => [a, resolve(`apps/${a}/index.html`)])),
+        // every .html page inside each app folder (index.html plus extras like showroom.html)
+        ...Object.fromEntries(
+          apps.flatMap((a) =>
+            readdirSync(`apps/${a}`)
+              .filter((f) => f.endsWith('.html'))
+              .map((f) => [f === 'index.html' ? a : `${a}/${f.replace('.html', '')}`, resolve(`apps/${a}/${f}`)])
+          )
+        ),
       },
     },
   },

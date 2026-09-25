@@ -1,5 +1,6 @@
-// Everything you see that isn't a bike: sky, track mesh, stadium crowd,
-// start/finish arches, mud, cooling pads, dust particles.
+// The race course itself, styled by the biome: sky, lights, ground, track
+// mesh, mud/ice/oil patches, cooling pads, arches, signs, dust, confetti.
+// Backdrops, crowds, animals and weather live in their own modules.
 import * as THREE from 'three';
 import { LANES, TRACK_HALF_WIDTH, FINISH_X, START_X } from './track.js';
 import { mulberry32 } from './rng.js';
@@ -15,22 +16,23 @@ function canvasTexture(w, h, draw) {
   return tex;
 }
 
-export function buildWorld(scene, track) {
+export function buildWorld(scene, track, biome) {
   const rng = mulberry32(99);
 
   // Sky gradient + fog
   scene.background = canvasTexture(4, 256, (g, w, h) => {
     const grad = g.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, '#2a6fdb');
-    grad.addColorStop(0.55, '#8ec5ff');
-    grad.addColorStop(1, '#ffd9a8');
+    grad.addColorStop(0, biome.sky[0]);
+    grad.addColorStop(0.55, biome.sky[1]);
+    grad.addColorStop(1, biome.sky[2]);
     g.fillStyle = grad;
     g.fillRect(0, 0, w, h);
   });
-  scene.fog = new THREE.Fog('#bcd8f5', 70, 220);
+  scene.fog = new THREE.Fog(biome.fog.color, biome.fog.near, biome.fog.far);
 
-  scene.add(new THREE.HemisphereLight('#cfe6ff', '#6b4a2b', 1.3));
-  const sun = new THREE.DirectionalLight('#fff4e0', 2.6);
+  const hemi = new THREE.HemisphereLight(biome.hemi.sky, biome.hemi.ground, biome.hemi.intensity);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(biome.sun.color, biome.sun.intensity);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 25, bottom: -25, near: 1, far: 120 });
@@ -40,7 +42,7 @@ export function buildWorld(scene, track) {
   // Grass
   const grass = new THREE.Mesh(
     new THREE.PlaneGeometry(4000, 400),
-    new THREE.MeshStandardMaterial({ color: '#4f9a3a', roughness: 1 })
+    new THREE.MeshStandardMaterial({ color: biome.ground, roughness: 1 })
   );
   grass.rotation.x = -Math.PI / 2;
   grass.position.set(600, -0.02, 0);
@@ -49,13 +51,13 @@ export function buildWorld(scene, track) {
 
   // Track surface: dirt texture with lane lines, extruded from the height profile.
   const dirt = canvasTexture(256, 256, (g, w, h) => {
-    g.fillStyle = '#b5783f';
+    g.fillStyle = biome.dirt.base;
     g.fillRect(0, 0, w, h);
     for (let i = 0; i < 2500; i++) {
-      g.fillStyle = `rgba(${rng() < 0.5 ? '90,55,25' : '220,170,110'},${0.15 + rng() * 0.25})`;
+      g.fillStyle = `rgba(${rng() < 0.5 ? biome.dirt.dark : biome.dirt.light},${0.15 + rng() * 0.25})`;
       g.fillRect(rng() * w, rng() * h, 2 + rng() * 3, 2 + rng() * 3);
     }
-    g.fillStyle = 'rgba(255,245,225,0.75)';
+    g.fillStyle = biome.dirt.lines;
     for (const z of [-3, 0, 3]) {
       const v = ((z + TRACK_HALF_WIDTH) / (TRACK_HALF_WIDTH * 2)) * h;
       for (let x = 0; x < w; x += 32) g.fillRect(x, v - 1.5, 18, 3);
@@ -96,10 +98,11 @@ export function buildWorld(scene, track) {
   skirtGeo.setAttribute('position', new THREE.Float32BufferAttribute(skirt, 3));
   skirtGeo.setIndex(skirtIdx);
   skirtGeo.computeVertexNormals();
-  scene.add(new THREE.Mesh(skirtGeo, new THREE.MeshStandardMaterial({ color: '#7a4a22', roughness: 1, side: THREE.DoubleSide })));
+  scene.add(new THREE.Mesh(skirtGeo, new THREE.MeshStandardMaterial({ color: biome.dirt.skirt, roughness: 1, side: THREE.DoubleSide })));
 
   // Mud patches (dark, glossy) and cooling pads (glowing blue chevrons).
-  const mudMat = new THREE.MeshStandardMaterial({ color: '#5e3a1a', roughness: 0.45, metalness: 0.05 });
+  const mudMat = new THREE.MeshStandardMaterial({ color: biome.mud, roughness: 0.3, metalness: 0.1,
+    emissive: biome.id === 'volcano' || biome.id === 'neon' ? biome.mud : '#000', emissiveIntensity: 0.6 });
   for (const m of track.mud) {
     for (const lane of m.lanes) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(m.x1 - m.x0, 2.6), mudMat);
@@ -126,7 +129,7 @@ export function buildWorld(scene, track) {
   // Hay bales along the far edge.
   const bales = new THREE.InstancedMesh(
     new THREE.CylinderGeometry(0.7, 0.7, 1.6, 12),
-    new THREE.MeshStandardMaterial({ color: '#e0c060', roughness: 1 }),
+    new THREE.MeshStandardMaterial({ color: { canyon: '#c98a4a', alpine: '#e8f0f8', neon: '#ff2d95', volcano: '#6b4a2a' }[biome.id] || '#e0c060', roughness: 1, emissive: biome.night ? '#ff2d95' : '#000', emissiveIntensity: biome.night ? 0.4 : 0 }),
     Math.ceil((track.end - track.begin) / 2.2)
   );
   const m4 = new THREE.Matrix4();
@@ -139,48 +142,8 @@ export function buildWorld(scene, track) {
   bales.castShadow = true;
   scene.add(bales);
 
-  // Grandstand + bobbing crowd.
-  const stand = new THREE.Group();
-  const standMat = new THREE.MeshStandardMaterial({ color: '#8d93a8', roughness: 0.8 });
-  const len = track.end - track.begin;
-  for (let tier = 0; tier < 6; tier++) {
-    const b = new THREE.Mesh(new THREE.BoxGeometry(len, 1, 2), standMat);
-    b.position.set(track.begin + len / 2, 0.5 + tier * 1.1, -14 - tier * 2);
-    b.receiveShadow = true;
-    stand.add(b);
-  }
-  scene.add(stand);
-
-  const CROWD = 2400;
-  const crowd = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.28, 0.5, 3, 6), new THREE.MeshStandardMaterial({ roughness: 0.8 }), CROWD);
-  const crowdBase = [];
   const col = new THREE.Color();
-  for (let i = 0; i < CROWD; i++) {
-    const tier = Math.floor(rng() * 6);
-    const p = new THREE.Vector3(track.begin + rng() * len, 1.55 + tier * 1.1, -14 - tier * 2 + (rng() - 0.5));
-    crowdBase.push({ p, phase: rng() * Math.PI * 2, amp: 0.1 + rng() * 0.2 });
-    crowd.setColorAt(i, col.setHSL(rng(), 0.7, 0.55));
-  }
-  scene.add(crowd);
-  const updateCrowd = (time, focusX, excitement) => {
-    for (let i = 0; i < CROWD; i++) {
-      const c = crowdBase[i];
-      const near = Math.abs(c.p.x - focusX) < 60;
-      const y = c.p.y + (near ? Math.abs(Math.sin(time * 6 * (0.5 + excitement) + c.phase)) * c.amp * (1 + excitement * 2) : 0);
-      m4.makeTranslation(c.p.x, y, c.p.z);
-      crowd.setMatrixAt(i, m4);
-    }
-    crowd.instanceMatrix.needsUpdate = true;
-  };
-
-  // Mountains in the distance.
-  const hillMat = new THREE.MeshStandardMaterial({ color: '#5d7fa8', roughness: 1, flatShading: true });
-  for (let i = 0; i < 40; i++) {
-    const h = 20 + rng() * 40;
-    const m = new THREE.Mesh(new THREE.ConeGeometry(18 + rng() * 25, h, 5), hillMat);
-    m.position.set(track.begin + rng() * (len + 200), h / 2 - 2, -90 - rng() * 60);
-    scene.add(m);
-  }
+  const len = track.end - track.begin;
 
   // Start + finish arches.
   const arch = (x, label, colors) => {
@@ -310,5 +273,5 @@ export function buildWorld(scene, track) {
     if (any) confetti.instanceMatrix.needsUpdate = true;
   };
 
-  return { sun, updateCrowd, puff, updateDust, celebrate, updateConfetti };
+  return { sun, hemi, puff, updateDust, celebrate, updateConfetti };
 }

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>REDLINE MX Showroom</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0d0f14; color: #eef; font-family: system-ui, sans-serif; overflow: hidden; }
+      canvas { position: fixed; inset: 0; display: block; }
+      #labels { position: fixed; inset: 0; display: grid; pointer-events: none; }
+      .cell { position: relative; border: 1px solid rgba(255,255,255,0.06); }
+      .cell h2 { margin: 0; position: absolute; left: 12px; top: 8px; font-size: 18px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 800; }
+      .cell h2 small { font-weight: 500; opacity: 0.55; font-size: 11px; margin-left: 6px; letter-spacing: 0; }
+      .cell p { margin: 0; position: absolute; left: 12px; top: 32px; right: 12px; font-size: 12px; opacity: 0.7; }
+      .cell .meta { position: absolute; right: 10px; bottom: 8px; font-size: 11px; opacity: 0.5; font-family: ui-monospace, monospace; }
+      #bar { position: fixed; right: 12px; top: 10px; display: flex; gap: 6px; z-index: 2; }
+      #bar button { background: #1d2230; color: #dde; border: 1px solid #333a4d; border-radius: 6px; padding: 5px 10px; font: 12px system-ui; cursor: pointer; }
+      #bar button.on { background: #ff3b3b; border-color: #ff3b3b; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="labels"></div>
+    <div id="bar">
+      <button id="spin">Turntable</button>
+      <button id="side">Side view</button>
+      <button id="turbo" class="on">Turbo</button>
+    </div>
+    <script type="module" src="./showroom.js"></script>
+  </body>
+</html>

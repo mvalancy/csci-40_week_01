@@ -11,7 +11,8 @@
     "new": "node scripts/new-app.js",
     "setup": "npm install && playwright install chromium",
     "test": "node scripts/test.js test",
-    "loop": "node scripts/loop.js"
+    "loop": "node scripts/loop.js",
+    "deploy": "vite build && npx --yes wrangler@4 pages deploy dist --project-name=redline-mx --branch=main --commit-dirty=true"
   },
   "license": "MIT",
   "description": "AI App Lab — prompt a web app, watch the AI test it in a live browser. CSCI 40 week 1.",

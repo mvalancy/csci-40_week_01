@@ -12,6 +12,7 @@
       <div class="tl">
         <div id="place" class="place">1<sup>st</sup></div>
         <div id="timer" class="timer">0:00.00</div>
+        <div id="race-coins" class="race-coins">◉ 0</div>
       </div>
       <div class="tr"><span id="speed">0</span><small>km/h</small></div>
       <div class="bottom">
@@ -19,21 +20,26 @@
         <div class="progress" id="progress"></div>
       </div>
       <div id="stats" class="stats"></div>
+      <div id="ability" class="ability"><span id="ability-name">ABILITY</span><div class="abar"><div id="ability-fill"></div></div><kbd>C</kbd></div>
+      <div id="effects" class="effects"></div>
+      <div id="pickups" class="pickups"></div>
     </div>
     <div id="callout" class="callout"></div>
     <div id="title" class="screen">
       <h1>RED<span>LINE</span><em>MX</em></h1>
-      <p class="blink">PRESS ENTER TO RACE</p>
+      <p class="blink">PRESS ENTER</p>
       <div class="controls">
         <div><kbd>Z</kbd>/<kbd>Space</kbd> throttle</div>
         <div><kbd>X</kbd>/<kbd>Shift</kbd> turbo (watch TEMP!)</div>
         <div><kbd>↑</kbd><kbd>↓</kbd> change lanes</div>
         <div><kbd>←</kbd><kbd>→</kbd> lean back / forward in the air</div>
+        <div><kbd>C</kbd> special ability (charge it with tricks)</div>
         <div><kbd>P</kbd> autopilot · <kbd>M</kbd> mute</div>
       </div>
-      <p class="tip">Land matching the ground angle for a PERFECT speed boost. Blue arrows cool your engine.</p>
+      <p class="tip">Land matching the ground angle for a PERFECT boost. Hold ← on big jumps to backflip. Grab coins to buy bikes & upgrades in the garage.</p>
     </div>
     <div id="results" class="screen" hidden></div>
+    <div id="garage" class="garage" hidden></div>
     <a class="back" href="/">← hub</a>
     <script type="module" src="./main.js"></script>
   </body>

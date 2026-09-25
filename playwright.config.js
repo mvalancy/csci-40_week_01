@@ -13,7 +13,11 @@ const SCREEN_W = +(process.env.SCREEN_W || 1920);
 const SCREEN_H = +(process.env.SCREEN_H || 1080);
 const HALF = Math.floor(SCREEN_W / 2);
 const WIN_W = HALF - 56; // margin for a side dock so windows never cross the midline
-const WIN_X = process.env.SIDE === 'right' ? HALF + 8 : 0;
+const RIGHT = process.env.SIDE === 'right';
+const WIN_X = RIGHT ? HALF + 8 : 0;
+// Each side gets its own dev server so one agent's restarts/reloads
+// never hit the other agent's pages mid-test.
+const PORT = +(process.env.PORT || (RIGHT ? 5174 : 5173));
 
 export default defineConfig({
   testDir: APP ? `apps/${APP}` : '.',
@@ -25,7 +29,7 @@ export default defineConfig({
   workers: SHOW ? 1 : undefined,
   reporter: [['list'], ['html', { open: 'never', outputFolder: `playwright-report/${out}` }]],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${PORT}`,
     // Fits inside a half-screen window (browser chrome takes ~100px).
     viewport: SHOW ? { width: WIN_W - 16, height: SCREEN_H - 150 } : { width: 1280, height: 720 },
     headless: !SHOW,
@@ -48,10 +52,10 @@ export default defineConfig({
       ],
     },
   },
-  // One shared dev server for every app; whoever starts first, others reuse it.
+  // Reused if already running on this port.
   webServer: {
-    command: 'npx vite --port 5173 --strictPort',
-    url: 'http://localhost:5173',
+    command: `npx vite --port ${PORT} --strictPort`,
+    url: `http://localhost:${PORT}`,
     reuseExistingServer: true,
     timeout: 60_000,
   },

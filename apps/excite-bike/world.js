@@ -266,5 +266,49 @@ export function buildWorld(scene, track) {
     }
   };
 
-  return { sun, updateCrowd, puff, updateDust };
+  // Confetti: one InstancedMesh, simple per-piece physics with flutter.
+  const MAX_CONFETTI = 600;
+  const confetti = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(0.28, 0.16),
+    new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
+    MAX_CONFETTI
+  );
+  confetti.frustumCulled = false;
+  const pieces = [];
+  const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < MAX_CONFETTI; i++) {
+    confetti.setMatrixAt(i, hidden);
+    confetti.setColorAt(i, col.setHSL(i / MAX_CONFETTI, 0.9, 0.6));
+    pieces.push({ life: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), r: new THREE.Euler(), w: new THREE.Vector3() });
+  }
+  scene.add(confetti);
+  let confettiI = 0;
+  const celebrate = (x, y, count = 200) => {
+    for (let i = 0; i < count; i++) {
+      const c = pieces[confettiI++ % MAX_CONFETTI];
+      c.life = 2.5 + Math.random() * 1.5;
+      c.p.set(x + (Math.random() - 0.5) * 4, y + Math.random() * 2, (Math.random() - 0.5) * 10);
+      c.v.set((Math.random() - 0.3) * 14, 8 + Math.random() * 14, (Math.random() - 0.5) * 10);
+      c.w.set(Math.random() * 12, Math.random() * 12, Math.random() * 12);
+    }
+  };
+  const q2 = new THREE.Quaternion();
+  const one = new THREE.Vector3(1, 1, 1);
+  const updateConfetti = (dt) => {
+    let any = false;
+    pieces.forEach((c, i) => {
+      if (c.life <= 0) return;
+      any = true;
+      c.life -= dt;
+      c.v.y -= 14 * dt;
+      c.v.multiplyScalar(1 - 1.8 * dt); // air drag → flutter down slowly
+      c.p.addScaledVector(c.v, dt);
+      c.r.x += c.w.x * dt; c.r.y += c.w.y * dt; c.r.z += c.w.z * dt;
+      m4.compose(c.p, q2.setFromEuler(c.r), one);
+      confetti.setMatrixAt(i, c.life > 0 ? m4 : hidden);
+    });
+    if (any) confetti.instanceMatrix.needsUpdate = true;
+  };
+
+  return { sun, updateCrowd, puff, updateDust, celebrate, updateConfetti };
 }

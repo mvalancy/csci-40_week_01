@@ -36,3 +36,14 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .results table { font: 600 20px ui-monospace, monospace; border-collapse: collapse; background: #0009; border-radius: 10px; }
 .results td { padding: 6px 18px; }
 .results tr.me { color: #ffcf40; }
+.record { font: 900 22px system-ui; color: #6cf; letter-spacing: .1em; min-height: 1em; margin: 4px 0 0; }
+#touchpad { position: fixed; inset: auto 0 0 0; height: 0; z-index: 10; }
+.tb { position: fixed; width: 64px; height: 64px; border-radius: 50%; border: 2px solid #fff8; background: #0006; color: #fff;
+  font: 900 20px system-ui; touch-action: none; -webkit-tap-highlight-color: transparent; backdrop-filter: blur(4px); }
+.tb.on { background: #ffcf40cc; color: #111; transform: scale(.94); }
+.tb.up { left: 86px; bottom: 150px; } .tb.down { left: 86px; bottom: 16px; }
+.tb.left { left: 16px; bottom: 83px; } .tb.right { left: 156px; bottom: 83px; }
+.tb.a { right: 20px; bottom: 40px; width: 96px; height: 96px; font-size: 18px; background: #ff3b3b99; }
+.tb.b { right: 128px; bottom: 26px; width: 76px; height: 76px; font-size: 13px; background: #3b7bff99; }
+body.touch .bottom { bottom: 190px; }
+body.touch .controls { display: none; }

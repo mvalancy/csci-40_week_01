@@ -10,7 +10,8 @@
     "report": "node scripts/test.js report",
     "new": "node scripts/new-app.js",
     "setup": "npm install && playwright install chromium",
-    "test": "node scripts/test.js test"
+    "test": "node scripts/test.js test",
+    "loop": "node scripts/loop.js"
   },
   "license": "MIT",
   "description": "AI App Lab — prompt a web app, watch the AI test it in a live browser. CSCI 40 week 1.",

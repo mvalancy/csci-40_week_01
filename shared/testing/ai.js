@@ -27,6 +27,10 @@ export const test = base.extend({
       if (r.status() >= 400 && !r.url().endsWith('/favicon.ico')) errors.push(`HTTP ${r.status()}: ${r.url()}`);
     });
     await page.addInitScript(installOverlay);
+    // Swallow Vite's hot-reload socket: any file edit anywhere (by you or
+    // another agent) makes Vite reload every open page, which would reset
+    // the app mid-test. Tests always load the code fresh anyway.
+    await page.routeWebSocket(/^ws:\/\/localhost:\d+\/(\?.*)?$/, () => {});
 
     let n = 0;
     const overlay = (fn, ...args) =>

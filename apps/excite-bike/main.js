@@ -4,6 +4,7 @@ import { buildWorld } from './world.js';
 import { buildBike, WHEEL_R, WHEELBASE } from './bike.js';
 import { Rider, G } from './rider.js';
 import { createAudio } from './audio.js';
+import { setupTouch } from './touch.js';
 
 // ---------- renderer / scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -35,6 +36,7 @@ const riders = ROSTER.map((r) => {
   return rider;
 });
 const player = riders[0];
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 // ---------- input ----------
 const keys = new Set();
@@ -86,7 +88,7 @@ function predictLanding(r) {
 function aiInput(r, skill) {
   const input = { throttle: true, turbo: r.heat < 45 + skill * 30, lean: 0, laneDelta: 0 };
   if (r.airborne) {
-    const diff = r.pitch - predictLanding(r).slope;
+    const diff = wrap(r.pitch - predictLanding(r).slope);
     const deadzone = 0.06 + (1 - skill) * 0.3;
     input.lean = diff > deadzone ? 1 : diff < -deadzone ? -1 : 0;
     return input;
@@ -157,6 +159,11 @@ function standings() {
   });
 }
 
+const BEST_KEY = 'excite-bike-3d.best';
+const readBest = () => { try { return +localStorage.getItem(BEST_KEY) || null; } catch { return null; } };
+let best = readBest();
+let newRecord = false;
+
 function showResults() {
   const rows = standings()
     .map((r, i) => `<tr class="${r === player ? 'me' : ''}"><td>${i + 1}.</td><td>${r.name}</td><td>${r.finishTime != null ? fmt(r.finishTime) : '--'}</td></tr>`)
@@ -164,7 +171,8 @@ function showResults() {
   const el = $('results');
   el.className = 'screen results';
   el.innerHTML = `<h2>${placeNow === 1 ? 'YOU WIN!' : 'FINISH!'}</h2><table>${rows}</table>
-    <p>jumps ${player.jumps} · perfect landings ${player.perfects} · crashes ${player.crashes} · overheats ${player.overheats}</p>
+    <p class="record">${newRecord ? '★ NEW RECORD ★' : best ? `best ${fmt(best)}` : ''}</p>
+    <p>jumps ${player.jumps} · perfect landings ${player.perfects} · flips ${player.flips} · crashes ${player.crashes} · overheats ${player.overheats}</p>
     <p class="blink">PRESS ENTER TO RACE AGAIN</p>`;
   el.hidden = false;
 }
@@ -181,7 +189,12 @@ function handleEvents(events) {
       if (me) {
         shake = Math.max(shake, 0.25);
         audio.land();
-        if (e.perfect) { callout('PERFECT!', 'gold', 700); audio.perfect(); }
+        if (e.flips) {
+          const name = e.backflip ? 'BACKFLIP' : 'FRONTFLIP';
+          callout(e.flips > 1 ? `${e.flips}× ${name}!` : `${name}!`, 'blue', 1100);
+          audio.perfect();
+          world.celebrate(r.x, r.y + 2, 40);
+        } else if (e.perfect) { callout('PERFECT!', 'gold', 700); audio.perfect(); }
       }
     } else if (e.type === 'overheat' && me) {
       callout('OVERHEAT!', 'red', 1500);
@@ -230,7 +243,13 @@ function simulate(dt) {
   if (state === 'racing' && player.finishTime != null) {
     state = 'finished';
     placeNow = standings().indexOf(player) + 1;
+    newRecord = !best || player.finishTime < best;
+    if (newRecord) {
+      best = player.finishTime;
+      try { localStorage.setItem(BEST_KEY, String(best)); } catch {}
+    }
     callout('FINISH!', 'gold', 1500);
+    world.celebrate(FINISH_X, player.y + 3, 260);
     setTimeout(showResults, 1200);
   }
 }
@@ -272,7 +291,7 @@ function renderHUD() {
   hud.heat.style.width = `${player.heat}%`;
   hud.heat.parentElement.parentElement.classList.toggle('hot', player.heat > 75);
   riders.forEach((r, i) => (hud.dots[i].style.left = `${Math.min(100, Math.max(0, ((r.x - START_X) / (FINISH_X - START_X)) * 100))}%`));
-  hud.stats.innerHTML = `jumps ${player.jumps}<br>perfect ${player.perfects}<br>crashes ${player.crashes}<br>air ${player.maxAir.toFixed(2)}s${autopilot ? '<br><b style="color:#6cf">AUTOPILOT</b>' : ''}`;
+  hud.stats.innerHTML = `jumps ${player.jumps}<br>perfect ${player.perfects}<br>flips ${player.flips}<br>crashes ${player.crashes}<br>air ${player.maxAir.toFixed(2)}s${autopilot ? '<br><b style="color:#6cf">AUTOPILOT</b>' : ''}`;
 }
 
 function frame(now) {
@@ -283,6 +302,7 @@ function frame(now) {
 
   renderRiders(dt);
   world.updateDust(dt);
+  world.updateConfetti(dt);
   const t = timer.getElapsed();
   world.updateCrowd(t, player.x, player.airborne ? 1 : player.speed / 60);
 
@@ -292,7 +312,7 @@ function frame(now) {
     ? new THREE.Vector3(START_X + 8 + Math.sin(t * 0.3) * 6, 5, 20)
     : new THREE.Vector3(player.x + 3, player.y * 0.6 + 5.5, (21 + player.speed * 0.08) * zoomOut);
   camPos.lerp(target, Math.min(1, dt * 4));
-  camLook.lerp(new THREE.Vector3(idle ? START_X + 10 : player.x + 8, (idle ? 0 : player.y * 0.5) + 1.5, 0), Math.min(1, dt * 5));
+  camLook.lerp(new THREE.Vector3(idle ? START_X + 10 : player.x + 8, (idle ? 0 : player.y * 0.5) + 1.5 + (zoomOut - 1) * 9, 0), Math.min(1, dt * 5));
   camera.position.copy(camPos);
   if (shake > 0) {
     camera.position.x += (Math.random() - 0.5) * shake;
@@ -330,13 +350,16 @@ const app = (window.__app = {
       state,
       raceTime,
       autopilot,
+      best,
+      newRecord,
       finishX: FINISH_X,
       place: placeNow,
       player: {
-        x: p.x, y: p.y, lane: p.lane, speed: p.speed, heat: p.heat, pitch: p.pitch,
+        x: p.x, y: p.y, lane: p.lane, speed: p.speed, heat: p.heat, pitch: wrap(p.pitch), flips: p.flips,
         airborne: p.airborne, crashed: p.crashed, overheated: p.overheated,
         jumps: p.jumps, perfects: p.perfects, crashes: p.crashes, overheats: p.overheats,
         maxAir: p.maxAir, finishTime: p.finishTime, throttle: p.throttle, turbo: p.turbo,
+        airSpin: p.airSpin, airTime: p.airTime, vy: p.vy,
       },
       landingSlope: predictLanding(p).slope,
       laneAhead: [0, 1, 2, 3].map((l) => ({
@@ -348,4 +371,21 @@ const app = (window.__app = {
   },
 });
 
+// Debug helpers so tests can jump straight to one segment of the track.
+app.debug = {
+  track: () => ({
+    ramps: track.ramps.map((r) => ({ x0: r.x0, h: r.h, end: r.x0 + r.up + r.top + r.down })),
+    mud: track.mud.map((m) => ({ x0: m.x0, x1: m.x1, lanes: [...m.lanes] })),
+    coolers: track.coolers.map((c) => ({ ...c })),
+  }),
+  teleport(x, lane = player.lane, speed = 0) {
+    Object.assign(player, { x, lane, z: LANES[lane], y: track.height(x), airborne: false, speed, pitch: track.slope(x), crashTimer: 0 });
+    // Park the rivals behind so they don't interfere.
+    riders.slice(1).forEach((r, i) => Object.assign(r, { x: x - 40 - i * 5, y: track.height(x - 40 - i * 5), airborne: false, speed: 0 }));
+    laneQueue = 0;
+  },
+  setHeat(h) { player.heat = h; },
+};
+
+setupTouch();
 renderer.setAnimationLoop(frame);

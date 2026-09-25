@@ -15,6 +15,16 @@ export default defineConfig({
     // Test output must not trigger reloads in pages that are mid-test.
     watch: { ignored: ['**/test-results/**', '**/playwright-report/**', '**/dist/**'] },
   },
+  // Pre-bundle every shared library up front and scan all apps at startup.
+  // Otherwise the first time any app imports something new, Vite re-optimizes
+  // and force-reloads EVERY open page — breaking other agents' running tests.
+  optimizeDeps: {
+    entries: ['index.html', 'apps/*/index.html'],
+    include: [
+      'three', 'three/webgpu', 'three/tsl',
+      'cannon-es', 'gsap', 'tone', 'chart.js/auto', 'lil-gui', 'matter-js', 'simplex-noise',
+    ],
+  },
   build: {
     chunkSizeWarningLimit: 800, // three.js alone is ~560 kB
     rollupOptions: {

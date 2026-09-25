@@ -9,6 +9,8 @@ const TURBO_ACCEL = 32;
 const COAST_DRAG = 9;
 const MUD_MAX = 13;
 const PITCH_RATE = 3.2;
+const SPIN_BOOST = 7; // holding a lean spins faster and faster — enough for a backflip off a big ramp
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export const CRASH_ANGLE = 0.9;
 const CRASH_TIME = 1.6;
 const OVERHEAT_TIME = 2.5;
@@ -39,6 +41,9 @@ export class Rider {
     this.overheats = 0;
     this.jumps = 0;
     this.perfects = 0;
+    this.flips = 0;
+    this.leanHeld = 0;
+    this.airSpin = 0;
     this.airTime = 0;
     this.maxAir = 0;
     this.finishTime = null;
@@ -134,6 +139,8 @@ export class Rider {
     if (ballistic > ground + 0.03 && this.speed > 8) {
       this.airborne = true;
       this.airTime = 0;
+      this.airSpin = 0;
+      this.leanHeld = 0;
       this.y = ballistic;
       this.vy -= G * dt;
       this.jumps += 1;
@@ -154,14 +161,24 @@ export class Rider {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     // Lean input rotates the bike; with no input it drifts toward the flight path.
-    if (this.lean) this.pitch -= this.lean * PITCH_RATE * dt;
-    else this.pitch += (Math.atan2(this.vy, this.vx) * 0.5 - this.pitch) * Math.min(1, dt * 1.2);
+    const before = this.pitch;
+    if (this.lean) {
+      if (this.lean !== this.lastLean) this.leanHeld = 0; // reversing starts slow again
+      this.leanHeld += dt;
+      this.pitch -= this.lean * (PITCH_RATE + Math.min(1, this.leanHeld) * SPIN_BOOST) * dt;
+    } else {
+      this.leanHeld = 0;
+      this.pitch += (Math.atan2(this.vy, this.vx) * 0.5 - wrap(this.pitch)) * Math.min(1, dt * 1.2);
+    }
+    this.airSpin += this.pitch - before;
+    this.lastLean = this.lean;
     this.wheelie = 0;
 
     const ground = t.height(this.x);
     if (this.y <= ground) {
       const a = t.slope(this.x);
-      const diff = Math.abs(this.pitch - a);
+      const diff = Math.abs(wrap(this.pitch - a));
+      const flips = Math.round(Math.abs(this.airSpin) / (Math.PI * 2));
       this.y = ground;
       this.airborne = false;
       if (diff > CRASH_ANGLE) {
@@ -172,10 +189,14 @@ export class Rider {
       }
       const along = this.vx * Math.cos(a) + this.vy * Math.sin(a);
       const perfect = diff < 0.18;
-      this.speed = Math.max(0, along) * (perfect ? 1.08 : 1 - 0.3 * diff);
+      this.speed = Math.max(0, along) * (perfect ? 1.08 : 1 - 0.3 * diff) * (flips ? 1.2 : 1);
       this.pitch = a;
       if (perfect) this.perfects += 1;
-      events.push({ type: 'land', rider: this, perfect, diff });
+      if (flips) {
+        this.flips += flips;
+        this.heat = 0; // style points: a flip cools the engine
+      }
+      events.push({ type: 'land', rider: this, perfect, diff, flips, backflip: this.airSpin > 0 });
     }
   }
 }

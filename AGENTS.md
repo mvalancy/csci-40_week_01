@@ -39,8 +39,10 @@ week1/
 
 Headed browsers split the monitor in half so two agents can demo at once:
 
-- **Claude → left half** (default): `npm run show <slug>`
-- **Codex → right half**: `npm run show <slug> --right` (or `SIDE=right`)
+- **Claude → left half** (default): `npm run show <slug>` (dev server on port 5173)
+- **Codex → right half**: `npm run show <slug> --right` (or `SIDE=right`, dev server on port 5174)
+
+Each side has its own dev server, so a restart or reload on one side never breaks tests on the other.
 
 Stay on your side. Don't resize or move the other agent's window.
 
@@ -86,8 +88,10 @@ Plain Canvas 2D, WebAudio, and DOM work too. **Need a new package?** Tell the us
 | `npm test` | every app plus the hub |
 | `npm run report <slug>` | open that app's HTML report (screenshots and video) |
 | `npm run demo` | the Excite Bike showcase, headed |
+| `npm run loop [slug …] [--right]` | headed tests forever, round after round (summary in `test-results/loop.log`) |
 
-Per-app runs write to `test-results/<slug>/` and `playwright-report/<slug>/`, so agents testing different apps at the same time don't clobber each other. All runs share one Vite server on port 5173. If one is already running it is reused, so don't kill it.
+Per-app runs write to `test-results/<slug>/` and `playwright-report/<slug>/`, so agents testing different apps at the same time don't clobber each other. A Vite server already running on your side's port is reused. Don't kill the other side's server.
+If your app imports a package that isn't in `optimizeDeps.include` in `vite.config.js`, ask the user to add it there. A dependency discovered late forces every open page to reload.
 
 ## The `ai` test fixture
 

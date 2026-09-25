@@ -48,7 +48,7 @@ Stay on your side. Don't resize or move the other agent's window.
 
 ## Git & deploy
 
-- Repo: https://github.com/mvalancy/ai-app-lab (MIT, public). Live site: **https://redlinemx.mattvalancy.com** (Cloudflare Workers static assets; `/` redirects to REDLINE MX, every app is at `/apps/<slug>/`).
+- Repo: https://github.com/mvalancy/csci-40_week_01 (MIT, public). Live site: **https://redlinemx.mattvalancy.com** (Cloudflare Workers static assets; `/` redirects to REDLINE MX, every app is at `/apps/<slug>/`).
 - Deploy: `npm run deploy` (Vite build + `wrangler deploy`; needs `wrangler login`). CI deploys too once the repo has `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets.
 - **Commit only your own `apps/<slug>/` folder** (`git add apps/<slug>`). Run `git pull --rebase` right before `git push`. Never force-push, and never commit another agent's folder.
 - `npm run build` must pass before you push. It builds every app, so a broken app breaks the deploy for everyone.

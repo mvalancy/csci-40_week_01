@@ -41,7 +41,7 @@
         .map(([path, txt]) => { const slug = path.split('/')[2]; return { slug, title: slug, ...parse(txt) }; })
         .sort((a, b) => (a.slug === '_template') - (b.slug === '_template') || a.slug.localeCompare(b.slug));
       document.getElementById('apps').innerHTML = cards.map((a) => `
-        <a class="card" href="/apps/${a.slug}/" data-slug="${a.slug}">
+        <a class="card" href="${a.url ?? `/apps/${a.slug}/`}" data-slug="${a.slug}">
           ${a.owner ? `<span class="owner ${a.owner}">by ${a.owner}</span>` : ''}
           <div class="emoji">${a.emoji ?? '🧪'}</div>
           <h2>${a.title}</h2>

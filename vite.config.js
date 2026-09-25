@@ -4,8 +4,10 @@ import { resolve } from 'node:path';
 
 // Every folder in apps/ with an index.html becomes its own page.
 // Nothing to register: `npm run new my-app` and it shows up in the hub.
+// Apps with their own standalone.vite.config.js deploy to their own site
+// (e.g. ASHDRIVE → ashdrive.mattvalancy.com), so the lab build skips them.
 const apps = readdirSync('apps', { withFileTypes: true })
-  .filter((d) => d.isDirectory() && existsSync(`apps/${d.name}/index.html`))
+  .filter((d) => d.isDirectory() && existsSync(`apps/${d.name}/index.html`) && !existsSync(`apps/${d.name}/standalone.vite.config.js`))
   .map((d) => d.name);
 
 export default defineConfig({

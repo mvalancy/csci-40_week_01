@@ -2,7 +2,7 @@
 
 ![ASHDRIVE armored bike and industrial district](docs/preview.png)
 
-**[Play ASHDRIVE](https://ashdrive.pages.dev)** · [Public MIT source](https://github.com/mvalancy/ashdrive)
+**[Play ASHDRIVE](https://ashdrive.mattvalancy.com)** · [Public MIT source](https://github.com/mvalancy/ashdrive)
 
 An open-world combat sandbox: pilot a remotely controlled armored motorcycle and freely explore a hostile industrial district. Start on the ground at the motorpool, choose your route through factory yards and elevated freeways, fight interceptor drones and gunships, and raid three defended relays. Recover their data and return to the motorpool extraction pad when ready.
 
@@ -91,7 +91,7 @@ npm ci
 npm run dev
 ```
 
-The game is live at **[ashdrive.pages.dev](https://ashdrive.pages.dev)**. The existing Cloudflare Pages project, `ashdrive`, uses **Direct Upload**. GitHub Actions tests and builds the source; pushing to GitHub does not automatically deploy this Pages project.
+The game is live at **[ashdrive.mattvalancy.com](https://ashdrive.mattvalancy.com)**, with [ashdrive.pages.dev](https://ashdrive.pages.dev) as an alternate address. The existing Cloudflare Pages project, `ashdrive`, uses **Direct Upload**. GitHub Actions tests and builds the source; pushing to GitHub does not automatically deploy this Pages project.
 
 After validating a release locally, publish its static build with an authenticated Wrangler installation:
 
@@ -104,13 +104,13 @@ wrangler pages deploy dist --project-name ashdrive --branch main
 
 Use Node.js 22, as declared in `.node-version`. `wrangler.toml` declares the `ashdrive` project and `dist` output directory. `public/_headers` supplies static asset caching and response headers. The game requires no application server or runtime account connection.
 
-The custom hostname `ashdrive.mattvalancy.com` is associated with the Pages project and is awaiting its DNS record. In the Cloudflare DNS settings for `mattvalancy.com`, add:
+The custom hostname `ashdrive.mattvalancy.com` is active with verified HTTPS. Its Cloudflare DNS record is:
 
 | Type | Name | Target | Proxy |
 | --- | --- | --- | --- |
 | CNAME | `ashdrive` | `ashdrive.pages.dev` | Proxied |
 
-The custom address becomes available after DNS verification and certificate activation. The `pages.dev` address remains playable while that completes.
+Cloudflare Pages manages the certificate. The `pages.dev` address remains available as an alternate URL.
 
 Official documentation: [Wrangler Pages commands](https://developers.cloudflare.com/workers/wrangler/commands/pages/), [Pages custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/).
 

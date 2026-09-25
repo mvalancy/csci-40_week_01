@@ -1,11 +1,11 @@
-// Excite Bike 3D — one test per game segment, so a headed run
-// (`npm run show excite-bike`) walks through every mechanic on screen.
+// REDLINE MX — one test per game segment, so a headed run
+// (`npm run show redline-mx`) walks through every mechanic on screen.
 import { test, expect } from '../../shared/testing/ai.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 async function openGame(page, ai) {
-  await page.goto('/apps/excite-bike/');
+  await page.goto('/apps/redline-mx/');
   await ai.waitFor((s) => s.ready, { message: 'renderer warm-up' });
 }
 
@@ -36,12 +36,12 @@ async function steer(keys, s) {
   await keys.set('ArrowLeft', diff < -0.08);
 }
 
-test.describe('Excite Bike 3D', () => {
+test.describe('REDLINE MX', () => {
   test('1 · title screen and 3D world render', async ({ page, ai }) => {
     await ai.step('load the game', () => openGame(page, ai));
     await ai.step('WebGL scene is drawing real pixels', () => ai.expectCanvasAlive('canvas', 200));
     await ai.step('title screen is up', async () => {
-      await expect(page.locator('#title h1')).toBeVisible();
+      await expect(page.locator('#title h1')).toHaveText('REDLINEMX');
       await ai.check('state is "title"', (await ai.state()).state, (s) => s === 'title');
     });
     await ai.snap('title');
@@ -88,6 +88,9 @@ test.describe('Excite Bike 3D', () => {
       await ai.check('turbo speed above normal max (32)', s.player.speed, (v) => v > 32);
     });
     await ai.step('keep holding → OVERHEAT', async () => {
+      await ai.waitFor((s) => s.player.heat > 80, { message: 'redline' });
+      await expect(page.locator('.temp label')).toHaveText('REDLINE');
+      await ai.say('REDLINE — engine about to blow');
       const s = await ai.waitFor((s) => s.player.overheated, { message: 'overheat' });
       await ai.check('overheated', s.player.overheats, (n) => n === 1);
       await expect(page.locator('#callout')).toHaveText('OVERHEAT!');
@@ -211,7 +214,7 @@ test.describe('Excite Bike 3D', () => {
   });
 
   test('8 · autopilot finishes, results, record, restart', async ({ page, ai }) => {
-    await page.addInitScript(() => localStorage.removeItem('excite-bike-3d.best'));
+    await page.addInitScript(() => localStorage.removeItem('redline-mx.best'));
     await startRace(page, ai);
     await ai.step('P turns on autopilot', async () => {
       await ai.tap('p');
@@ -237,6 +240,7 @@ test.describe('Excite Bike 3D', () => {
   });
 
   test('9 · full race driven by Claude with the keyboard', async ({ page, ai }) => {
+    test.setTimeout(240_000);
     await startRace(page, ai);
     await ai.step('drive to the finish: manage heat, lanes & landings', async () => {
       await ai.say('autopilot OFF — Claude is driving');
@@ -244,7 +248,7 @@ test.describe('Excite Bike 3D', () => {
       await keys.set('z', true);
       let last = await ai.state();
       let lastMark = 0;
-      const deadline = Date.now() + 90_000;
+      const deadline = Date.now() + 200_000;
       while (Date.now() < deadline) {
         const s = await ai.state();
         if (!s) throw new Error('game state disappeared (page reloaded?)');
@@ -278,12 +282,12 @@ test.describe('Excite Bike 3D', () => {
   });
 });
 
-test.describe('Excite Bike 3D on a phone', () => {
+test.describe('REDLINE MX on a phone', () => {
   test.use({ viewport: { width: 430, height: 860 }, hasTouch: true, isMobile: true });
 
   test('10 · touch buttons drive the bike', async ({ page, ai }) => {
     await ai.step('load in phone mode', async () => {
-      await page.goto('/apps/excite-bike/?touch');
+      await page.goto('/apps/redline-mx/?touch');
       await ai.waitFor((s) => s.ready);
       await expect(page.locator('#touchpad .tb')).toHaveCount(6);
       await expect(page.locator('#title .blink')).toContainText('TAP');

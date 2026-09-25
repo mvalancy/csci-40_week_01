@@ -6,7 +6,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "show": "node scripts/test.js show",
-    "demo": "node scripts/test.js show excite-bike",
+    "demo": "node scripts/test.js show redline-mx",
     "report": "node scripts/test.js report",
     "new": "node scripts/new-app.js",
     "setup": "npm install && playwright install chromium",

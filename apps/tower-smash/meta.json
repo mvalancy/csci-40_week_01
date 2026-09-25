@@ -1,1 +1,6 @@
-{ "title": "Tower Smash", "description": "Physics demolition with cannon-es: fire glowing cannonballs, topple block towers, clear levels before you run out of ammo.", "emoji": "💥" }
+{
+  "title": "Tower Smash",
+  "description": "Physics demolition with cannon-es: fire glowing cannonballs, topple block towers, clear levels before you run out of ammo.",
+  "emoji": "💥",
+  "owner": "claude"
+}

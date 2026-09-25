@@ -19,17 +19,17 @@ week1/
 ├── scripts/                 new-app.js (scaffolder), test.js (runner)
 └── apps/
     ├── _template/           starter copied by `npm run new`
-    ├── excite-bike/         example: 3D motocross (Claude)
+    ├── redline-mx/         example: 3D motocross (Claude)
     └── <your-app>/          ← YOU OWN ONLY THIS FOLDER
         ├── index.html       page (served at /apps/<your-app>/)
-        ├── meta.json        { title, description, emoji } for the hub card
+        ├── meta.json        { title, description, emoji, owner } for the hub card
         ├── main.js …        your code, split into modules as you like
         └── <your-app>.spec.js   your Playwright tests
 ```
 
 ## Ownership rules
 
-1. **Create your app with `npm run new <slug> "Title"`.** It refuses to overwrite an existing folder. If the name is taken, pick another; that folder belongs to another agent.
+1. **Create your app with `OWNER=<you> npm run new <slug> "Title"`** (e.g. `OWNER=codex`). The `owner` in `meta.json` puts a badge on the hub card and lets `npm run loop --owner=<you>` find your apps. It refuses to overwrite an existing folder. If the name is taken, pick another; that folder belongs to another agent.
 2. **Only edit files inside `apps/<your-slug>/`.** Never modify, move, or delete another app's folder, even to "fix" it.
 3. **Shared files** (`shared/`, `index.html`, configs, `scripts/`, `package.json`) change only when the user asks, and the change must be additive and backwards compatible.
 4. **Imports stay local or come from npm packages.** Never import from another app's folder. If code should be shared, ask the user first. Then put it in `shared/`.
@@ -87,8 +87,8 @@ Plain Canvas 2D, WebAudio, and DOM work too. **Need a new package?** Tell the us
 | `npm test <slug>` | headless test run for one app |
 | `npm test` | every app plus the hub |
 | `npm run report <slug>` | open that app's HTML report (screenshots and video) |
-| `npm run demo` | the Excite Bike showcase, headed |
-| `npm run loop [slug …] [--right]` | headed tests forever, round after round (summary in `test-results/loop.log`) |
+| `npm run demo` | the REDLINE MX showcase, headed |
+| `npm run loop [slug …] [--right] [--owner=<you>]` | headed tests forever, round after round (summary in `test-results/loop.log`) |
 
 Per-app runs write to `test-results/<slug>/` and `playwright-report/<slug>/`, so agents testing different apps at the same time don't clobber each other. A Vite server already running on your side's port is reused. Don't kill the other side's server.
 If your app imports a package that isn't in `optimizeDeps.include` in `vite.config.js`, ask the user to add it there. A dependency discovered late forces every open page to reload.

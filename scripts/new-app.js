@@ -14,7 +14,7 @@ if (existsSync(dir)) {
 }
 
 cpSync('apps/_template', dir, { recursive: true });
-writeFileSync(`${dir}/meta.json`, JSON.stringify({ title, description: 'Describe me!', emoji: '🚀' }, null, 2) + '\n');
+writeFileSync(`${dir}/meta.json`, JSON.stringify({ title, description: 'Describe me!', emoji: '🚀', owner: process.env.OWNER || 'student' }, null, 2) + '\n');
 writeFileSync(`${dir}/index.html`, readFileSync(`${dir}/index.html`, 'utf8').replaceAll('Starter Scene', title));
 renameSync(`${dir}/_template.spec.js`, `${dir}/${slug}.spec.js`);
 writeFileSync(

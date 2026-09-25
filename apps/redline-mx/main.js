@@ -107,7 +107,7 @@ function aiInput(r, skill) {
 
 // ---------- HUD ----------
 const $ = (id) => document.getElementById(id);
-const hud = { root: $('hud'), place: $('place'), timer: $('timer'), speed: $('speed'), heat: $('heat'), stats: $('stats'), progress: $('progress') };
+const hud = { tempLabel: document.querySelector('.temp label'), root: $('hud'), place: $('place'), timer: $('timer'), speed: $('speed'), heat: $('heat'), stats: $('stats'), progress: $('progress') };
 hud.dots = riders.map((r, i) => {
   const d = document.createElement('i');
   d.style.background = r.color;
@@ -159,7 +159,7 @@ function standings() {
   });
 }
 
-const BEST_KEY = 'excite-bike-3d.best';
+const BEST_KEY = 'redline-mx.best';
 const readBest = () => { try { return +localStorage.getItem(BEST_KEY) || null; } catch { return null; } };
 let best = readBest();
 let newRecord = false;
@@ -289,7 +289,9 @@ function renderHUD() {
   hud.timer.textContent = fmt(raceTime);
   hud.speed.textContent = Math.round(player.speed * 3.6);
   hud.heat.style.width = `${player.heat}%`;
-  hud.heat.parentElement.parentElement.classList.toggle('hot', player.heat > 75);
+  const hot = player.heat > 75;
+  hud.heat.parentElement.parentElement.classList.toggle('hot', hot);
+  hud.tempLabel.textContent = hot ? 'REDLINE' : 'TEMP';
   riders.forEach((r, i) => (hud.dots[i].style.left = `${Math.min(100, Math.max(0, ((r.x - START_X) / (FINISH_X - START_X)) * 100))}%`));
   hud.stats.innerHTML = `jumps ${player.jumps}<br>perfect ${player.perfects}<br>flips ${player.flips}<br>crashes ${player.crashes}<br>air ${player.maxAir.toFixed(2)}s${autopilot ? '<br><b style="color:#6cf">AUTOPILOT</b>' : ''}`;
 }

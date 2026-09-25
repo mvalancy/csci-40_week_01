@@ -1,17 +1,22 @@
-// npm run loop [app ...] [--right]
+// npm run loop [app ...] [--right] [--owner=claude]
 // Runs the headed test suite for the given apps over and over, forever,
+// (--owner=<name> re-scans apps/*/meta.json every round, so new apps join automatically)
 // so the room can watch the AI validate its work. Ctrl+C to stop.
 // A one-line summary per round is appended to test-results/loop.log.
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 
 const right = process.argv.includes('--right');
-const apps = process.argv.slice(2).filter((a) => !a.startsWith('--'));
-if (!apps.length) apps.push('excite-bike');
+const owner = process.argv.find((a) => a.startsWith('--owner='))?.split('=')[1];
+const fixed = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const ownedBy = (who) => readdirSync('apps').filter((slug) => {
+  try { return JSON.parse(readFileSync(`apps/${slug}/meta.json`, 'utf8')).owner === who; } catch { return false; }
+});
+const pickApps = () => (owner ? ownedBy(owner) : fixed.length ? fixed : ['redline-mx']);
 mkdirSync('test-results', { recursive: true });
 
 for (let round = 1; ; round++) {
-  for (const app of apps) {
+  for (const app of pickApps()) {
     const started = Date.now();
     const r = spawnSync('node', ['scripts/test.js', 'show', app, ...(right ? ['--right'] : [])], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
     process.stdout.write(r.stdout);

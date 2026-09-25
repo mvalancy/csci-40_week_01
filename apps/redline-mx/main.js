@@ -9,6 +9,7 @@ import { createWeather } from './weather.js';
 import { buildWorld } from './world.js';
 import { buildBike, WHEEL_R, WHEELBASE } from './bikes.js';
 import { Rider } from './rider.js';
+import { optimizeBike } from './optimize.js';
 import { createItems } from './items.js';
 import { createAudio } from './audio.js';
 import { createMusic } from './music.js';
@@ -51,6 +52,9 @@ const modules = [
   weather,
 ];
 const items = createItems(ctx);
+// Shadow budget: only the bikes cast shadows (added below). Scenery, crowds,
+// animals and pickups receive but never cast — that halves the draw calls.
+scene.traverse((o) => { if (o.isMesh || o.isInstancedMesh) o.castShadow = false; });
 const focus = { x: 0, y: 0, z: 0, speed: 0, airborne: false, excitement: 0, riders: [], cameraX: 0 };
 const audio = createAudio();
 const music = createMusic(biome.id);
@@ -71,7 +75,7 @@ const riders = ROSTER.map((r, i) => {
   const rider = new Rider(track, r.lane, { stats, env, name: r.name });
   rider.color = r.color;
   rider.bikeId = r.bike;
-  rider.mesh = buildBike(r.bike, r.color, r.num);
+  rider.mesh = optimizeBike(buildBike(r.bike, r.color, r.num));
   scene.add(rider.mesh.root);
   return rider;
 });
@@ -106,7 +110,7 @@ let ghostRun = null; // [x, y, z, pitch] samples every GHOST_DT
 try { ghostRun = JSON.parse(localStorage.getItem(GHOST_KEY) || 'null'); } catch {}
 let recording = [];
 let recordClock = 0;
-const ghost = buildBike(playerBike.id, '#bfe9ff', 'G');
+const ghost = optimizeBike(buildBike(playerBike.id, '#bfe9ff', 'G'));
 ghost.root.traverse((o) => {
   if (!o.isMesh) return;
   o.castShadow = false;
@@ -606,17 +610,52 @@ function renderHUD() {
   hud.stats.innerHTML = `jumps ${player.jumps}<br>perfect ${player.perfects}<br>flips ${player.flips}<br>crashes ${player.crashes}<br>air ${player.maxAir.toFixed(2)}s${autopilot ? '<br><b style="color:#6cf">AUTOPILOT</b>' : ''}`;
 }
 
+// ---------- adaptive quality ----------
+// 2 = full res + shadows, 1 = 1x res + smaller shadows, 0 = 0.7x res, no shadows, shorter draw distance.
+// Watches real frame times and steps down when the machine can't keep up. ?quality=0|1|2 pins it.
+const pinnedQuality = params.has('quality') ? +params.get('quality') : null;
+let quality = pinnedQuality ?? 2;
+function applyQuality(q) {
+  quality = q;
+  renderer.setPixelRatio(q === 2 ? Math.min(devicePixelRatio, 2) : q === 1 ? 1 : 0.7);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = q > 0;
+  world.sun.castShadow = q > 0;
+  if (q === 1 && world.sun.shadow.map) { world.sun.shadow.map.dispose(); world.sun.shadow.map = null; }
+  world.sun.shadow.mapSize.set(q === 2 ? 2048 : 1024, q === 2 ? 2048 : 1024);
+  camera.far = q === 0 ? 170 : 400;
+  camera.updateProjectionMatrix();
+  scene.traverse((o) => o.material && (o.material.needsUpdate = true));
+}
+let qWindow = [];
+function watchQuality(realDt) {
+  if (pinnedQuality !== null || state === 'title' || state === 'garage') return;
+  qWindow.push(realDt);
+  if (qWindow.length < 90) return;
+  const avg = qWindow.reduce((a, b) => a + b, 0) / qWindow.length;
+  qWindow = [];
+  if (avg > 1 / 40 && quality > 0) applyQuality(quality - 1);
+}
+if (pinnedQuality !== null) applyQuality(pinnedQuality);
+
 let timeScale = 1;
+const perf = { frame: 0, sim: 0, modules: {}, render: 0 };
+const ema = (a, b) => a * 0.9 + b * 0.1;
 function frame(now) {
+  const t0 = performance.now();
   timer.update(now);
   // Physics steps at a fixed 1/120s, so we can catch up on slow frames without slow-motion.
-  const realDt = Math.min(timer.getDelta(), 1 / 8);
+  const rawDt = timer.getDelta();
+  watchQuality(rawDt);
+  const realDt = Math.min(rawDt, 1 / 8);
   // Cinematic slow-mo at the top of really big air (never on autopilot/tests' hot path for long).
   const bigAir = state === 'racing' && player.airborne && player.airTime > 0.45 && Math.abs(player.vy) < 6;
   timeScale += ((bigAir ? 0.45 : 1) - timeScale) * Math.min(1, realDt * 8);
   const dt = realDt * timeScale;
   acc += dt;
+  const ts = performance.now();
   while (acc >= STEP) { simulate(STEP); acc -= STEP; }
+  perf.sim = ema(perf.sim, performance.now() - ts);
   const t = timer.getElapsed();
 
   renderRiders(dt, t);
@@ -625,7 +664,7 @@ function frame(now) {
     r.tag.position.set(r.x, r.y + 3.4, r.z);
     r.tag.visible = state !== 'title' && state !== 'garage';
   }
-  world.updateDust(dt);
+  world.updateDust(dt, camera);
   world.updateConfetti(dt);
   if (state === 'title' || state === 'garage') items.update(dt, t, { x: START_X, y: 0, z: 99, has: () => false, crashed: true });
   Object.assign(focus, {
@@ -633,7 +672,12 @@ function frame(now) {
     excitement: player.airborne ? 1 : Math.min(1, player.speed / 50), cameraX: camera.position.x,
   });
   focus.riders = riders.map((r) => ({ x: r.x, y: r.y, z: r.z, airborne: r.airborne }));
-  for (const m of modules) m.update(dt, t, focus);
+  modules.forEach((m, i) => {
+    const tm = performance.now();
+    m.update(dt, t, focus);
+    const name = ['scenery', 'spectators', 'wildlife', 'weather'][i];
+    perf.modules[name] = ema(perf.modules[name] || 0, performance.now() - tm);
+  });
 
   // Side-on camera that leads the player.
   const idle = state === 'title' || state === 'garage';
@@ -658,7 +702,10 @@ function frame(now) {
   document.body.classList.toggle('slowmo', timeScale < 0.8);
   audio.engine(player.speed, player.turbo, state === 'racing' || state === 'countdown');
   music.setIntensity(player.turbo || player.airborne || player.has('nitro') ? 1 : player.speed / 60);
+  const tr = performance.now();
   renderer.render(scene, camera);
+  perf.render = ema(perf.render, performance.now() - tr);
+  perf.frame = ema(perf.frame, performance.now() - t0);
   app.frames += 1;
 }
 
@@ -679,6 +726,8 @@ const app = (window.__app = {
     return {
       ready: this.ready,
       frames: this.frames,
+      perf: JSON.parse(JSON.stringify(perf)),
+      quality,
       render: { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures },
       state,
       biome: biome.id,

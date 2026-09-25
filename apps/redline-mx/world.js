@@ -200,42 +200,53 @@ export function buildWorld(scene, track, biome) {
     scene.add(s);
   }
 
-  // Dust particles (pooled sprites).
+  // Dust particles: one InstancedMesh of camera-facing quads (1 draw call).
+  const DUST = 220;
   const dustTex = canvasTexture(64, 64, (g) => {
     const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, 'rgba(230,200,160,1)');
-    grad.addColorStop(1, 'rgba(230,200,160,0)');
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = grad;
     g.fillRect(0, 0, 64, 64);
   });
-  const dust = [];
-  for (let i = 0; i < 220; i++) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: dustTex, transparent: true, depthWrite: false, opacity: 0 }));
-    s.visible = false;
-    scene.add(s);
-    dust.push({ s, life: 0, v: new THREE.Vector3() });
-  }
+  const dustMesh = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: dustTex, transparent: true, depthWrite: false, opacity: 0.6, vertexColors: false }),
+    DUST
+  );
+  dustMesh.frustumCulled = false;
+  scene.add(dustMesh);
+  const dust = Array.from({ length: DUST }, () => ({ life: 0, max: 1, p: new THREE.Vector3(), v: new THREE.Vector3(), c: new THREE.Color() }));
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < DUST; i++) { dustMesh.setMatrixAt(i, zero); dustMesh.setColorAt(i, new THREE.Color('#e6c8a0')); }
+  const defaultDust = new THREE.Color('#e6c8a0');
   let dustI = 0;
   const puff = (x, y, z, amount = 1, color) => {
-    const d = dust[dustI++ % dust.length];
+    const d = dust[dustI++ % DUST];
     d.life = 1;
     d.max = 0.5 + Math.random() * 0.5;
-    d.s.position.set(x, y + 0.2, z + (Math.random() - 0.5) * 0.6);
+    d.p.set(x, y + 0.2, z + (Math.random() - 0.5) * 0.6);
     d.v.set(-2 - Math.random() * 3, 1 + Math.random() * 2.5 * amount, (Math.random() - 0.5) * 2);
-    d.s.material.color.set(color || '#ffffff');
-    d.s.visible = true;
+    d.c.set(color || defaultDust);
   };
-  const updateDust = (dt) => {
-    for (const d of dust) {
-      if (!d.s.visible) continue;
+  const dq = new THREE.Quaternion();
+  const ds = new THREE.Vector3();
+  const updateDust = (dt, camera) => {
+    if (camera) dq.copy(camera.quaternion);
+    dust.forEach((d, i) => {
+      if (d.life <= 0) return;
       d.life -= dt / d.max;
-      if (d.life <= 0) { d.s.visible = false; continue; }
-      d.s.position.addScaledVector(d.v, dt);
+      if (d.life <= 0) { dustMesh.setMatrixAt(i, zero); return; }
+      d.p.addScaledVector(d.v, dt);
       d.v.y -= 2 * dt;
       const k = 1 - d.life;
-      d.s.scale.setScalar(0.6 + k * 2.2);
-      d.s.material.opacity = d.life * 0.7;
-    }
+      ds.setScalar((0.6 + k * 2.2) * Math.max(0.2, d.life));
+      m4.compose(d.p, dq, ds);
+      dustMesh.setMatrixAt(i, m4);
+      dustMesh.setColorAt(i, d.c);
+    });
+    dustMesh.instanceMatrix.needsUpdate = true;
+    dustMesh.instanceColor.needsUpdate = true;
   };
 
   // Confetti: one InstancedMesh, simple per-piece physics with flutter.

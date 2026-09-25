@@ -36,6 +36,8 @@ Use the graphics selector to choose **Auto Quality**, **High Detail**, **Ultra D
 
 URL overrides are supported: `?quality=low`, `?quality=medium`, `?quality=high`, `?quality=ultra`, or `?quality=auto`. Combine options as `?renderer=webgl&quality=low`. Developers can add `?profile=1` for optional diagnostics; profiling is not required to play or use automatic quality. Performance still depends on the device and other active applications.
 
+See [Performance architecture](docs/PERFORMANCE.md) for implementation details and validation boundaries.
+
 ## Standalone development
 
 Requires Node.js 22.12 or newer. In an exported or cloned standalone repository:

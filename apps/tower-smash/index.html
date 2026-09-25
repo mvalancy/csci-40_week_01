@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tower Smash</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="hud">
+      <div class="lvl">LEVEL <b id="level">1</b></div>
+      <div class="ammo" id="ammo"></div>
+      <div class="meter"><div id="progress"></div><span id="pct">0%</span></div>
+    </div>
+    <div id="banner" class="banner" hidden></div>
+    <div class="help">click / tap to fire · drag to orbit · <kbd>R</kbd> restart level</div>
+    <a class="back" href="/">← hub</a>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

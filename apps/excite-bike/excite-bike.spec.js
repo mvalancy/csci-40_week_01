@@ -105,8 +105,8 @@ test.describe('Excite Bike 3D', () => {
     test.skip(!mud.length, 'this track seed has no mud');
     const patch = mud[0];
     await ai.step(`jump to the mud at ${Math.round(patch.x0)}m, lane ${patch.lanes[0]}`, async () => {
+      await page.keyboard.down('z'); // throttle first so slowMo can't make us coast
       await debug(page, 'teleport', patch.x0 - 30, patch.lanes[0], 30);
-      await page.keyboard.down('z');
       const s = await ai.state();
       await ai.check('arriving at speed', s.player.speed, (v) => v > 25);
     });

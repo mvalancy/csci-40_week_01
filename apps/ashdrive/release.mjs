@@ -35,7 +35,7 @@ async function collect(directory, prefix = '') {
   }
 }
 await collect(source);
-const html = files.get('index.html').toString().replace('<a href="/">↖ APP LAB</a>', '<a href="https://github.com/mvalancy/ashdrive">↗ SOURCE / MIT</a>');
+const html = files.get('index.html').toString().replace('<a href="/">↖ APP LAB</a>', '<a href="https://github.com/mvalancy/csci-40_week_01_ashdrive">↗ SOURCE / MIT</a>');
 files.set('index.html', html);
 const three = JSON.parse(await readFile(resolve(workspace, 'node_modules/three/package.json'), 'utf8'));
 const vite = JSON.parse(await readFile(resolve(workspace, 'node_modules/vite/package.json'), 'utf8'));
@@ -43,12 +43,12 @@ files.set('package.json', JSON.stringify({
   name: 'ashdrive', version: '1.0.0', private: true, type: 'module',
   description: 'Shadow Sector: armored motorcycle combat and data retrieval in a hostile industrial city.',
   license: 'MIT', author: 'mvalancy',
-  repository: { type: 'git', url: 'https://github.com/mvalancy/ashdrive.git' },
+  repository: { type: 'git', url: 'https://github.com/mvalancy/csci-40_week_01_ashdrive.git' },
   scripts: { dev: 'vite --host 0.0.0.0', build: 'vite build', preview: 'vite preview --host 0.0.0.0', 'test:unit': 'node --test tests/*.test.js', test: 'npm run test:unit' },
   engines: { node: '>=22.12.0' }, dependencies: { three: three.version }, devDependencies: { vite: vite.version },
 }, null, 2) + '\n');
 files.set('vite.config.js', "import { defineConfig } from 'vite';\nexport default defineConfig({ base: './' });\n");
-files.set('wrangler.toml', 'name = "ashdrive"\npages_build_output_dir = "./dist"\n');
+files.set('wrangler.toml', 'name = "csci-40-week-01-ashdrive"\npages_build_output_dir = "./dist"\n');
 files.set('.gitignore', 'node_modules/\ndist/\n.wrangler/\n.env*\n*.log\n.ashdrive-release\n');
 files.set('.node-version', '22\n');
 files.set('.github/workflows/build.yml', `name: Test and build static game

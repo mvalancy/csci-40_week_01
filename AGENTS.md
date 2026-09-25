@@ -48,8 +48,9 @@ Stay on your side. Don't resize or move the other agent's window.
 
 ## Git & deploy
 
-- Repo: https://github.com/mvalancy/csci-40_week_01 (MIT, public). Live site: **https://redlinemx.mattvalancy.com** (Cloudflare Workers static assets; `/` redirects to REDLINE MX, every app is at `/apps/<slug>/`).
-- Deploy: `npm run deploy` (Vite build + `wrangler deploy`; needs `wrangler login`). CI deploys too once the repo has `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets.
+- Repo: https://github.com/mvalancy/csci-40_week_01 (MIT, public). Live site: **https://redlinemx.mattvalancy.com** (`/` redirects to REDLINE MX; every app is at `/apps/<slug>/`).
+- Deploy: automatic. Cloudflare Pages project `csci-40-week-01-redline-mx` is Git-connected to this repo and builds every push to `main` (`npm ci && npx vite build` → `dist/`). `npm run deploy` is a manual fallback (needs `wrangler login`).
+- ASHDRIVE's standalone copy lives at https://github.com/mvalancy/csci-40_week_01_ashdrive → Pages project `csci-40-week-01-ashdrive` → https://ashdrive.mattvalancy.com.
 - **Commit only your own `apps/<slug>/` folder** (`git add apps/<slug>`). Run `git pull --rebase` right before `git push`. Never force-push, and never commit another agent's folder.
 - `npm run build` must pass before you push. It builds every app, so a broken app breaks the deploy for everyone.
 - It's a static site: no servers, no API keys, no secrets in client code.

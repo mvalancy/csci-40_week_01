@@ -2,7 +2,7 @@
 
 ![ASHDRIVE armored bike and industrial district](docs/preview.png)
 
-**[Play ASHDRIVE](https://ashdrive.mattvalancy.com)** · [Public MIT source](https://github.com/mvalancy/ashdrive)
+**[Play ASHDRIVE](https://ashdrive.mattvalancy.com)** · [Public MIT source](https://github.com/mvalancy/csci-40_week_01_ashdrive)
 
 An open-world combat sandbox: pilot a remotely controlled armored motorcycle and freely explore a hostile industrial district. Start on the ground at the motorpool, choose your route through factory yards and elevated freeways, fight interceptor drones and gunships, and raid three defended relays. Recover their data and return to the motorpool extraction pad when ready.
 
@@ -82,33 +82,33 @@ npx vite build --config apps/ashdrive/standalone.vite.config.js
 
 ## Public GitHub and Cloudflare Pages release
 
-Public source: [mvalancy/ashdrive](https://github.com/mvalancy/ashdrive), licensed under MIT. Clone it to develop independently of the shared lab:
+Public source: [mvalancy/csci-40_week_01_ashdrive](https://github.com/mvalancy/csci-40_week_01_ashdrive), licensed under MIT. Clone it to develop independently of the shared lab:
 
 ```sh
-git clone https://github.com/mvalancy/ashdrive.git
-cd ashdrive
+git clone https://github.com/mvalancy/csci-40_week_01_ashdrive.git
+cd csci-40_week_01_ashdrive
 npm ci
 npm run dev
 ```
 
-The game is live at **[ashdrive.mattvalancy.com](https://ashdrive.mattvalancy.com)**, with [ashdrive.pages.dev](https://ashdrive.pages.dev) as an alternate address. The existing Cloudflare Pages project, `ashdrive`, uses **Direct Upload**. GitHub Actions tests and builds the source; pushing to GitHub does not automatically deploy this Pages project.
+The game is live at **[ashdrive.mattvalancy.com](https://ashdrive.mattvalancy.com)**, with [csci-40-week-01-ashdrive.pages.dev](https://csci-40-week-01-ashdrive.pages.dev) as an alternate address. The Cloudflare Pages project `csci-40-week-01-ashdrive` is **Git-connected** to that repo: every push to `main` runs `npm ci && npm run build` on Node 22 and deploys `dist/`.
 
-After validating a release locally, publish its static build with an authenticated Wrangler installation:
+To publish by hand instead (for example from a local checkout), use an authenticated Wrangler installation:
 
 ```sh
 npm ci
 npm run test:unit
 npm run build
-wrangler pages deploy dist --project-name ashdrive --branch main
+wrangler pages deploy dist --project-name csci-40-week-01-ashdrive --branch main
 ```
 
-Use Node.js 22, as declared in `.node-version`. `wrangler.toml` declares the `ashdrive` project and `dist` output directory. `public/_headers` supplies static asset caching and response headers. The game requires no application server or runtime account connection.
+Use Node.js 22, as declared in `.node-version`. `wrangler.toml` declares the `csci-40-week-01-ashdrive` project and `dist` output directory. `public/_headers` supplies static asset caching and response headers. The game requires no application server or runtime account connection.
 
-The custom hostname `ashdrive.mattvalancy.com` is active with verified HTTPS. Its Cloudflare DNS record is:
+The custom hostname `ashdrive.mattvalancy.com` uses this Cloudflare DNS record:
 
 | Type | Name | Target | Proxy |
 | --- | --- | --- | --- |
-| CNAME | `ashdrive` | `ashdrive.pages.dev` | Proxied |
+| CNAME | `ashdrive` | `csci-40-week-01-ashdrive.pages.dev` | Proxied |
 
 Cloudflare Pages manages the certificate. The `pages.dev` address remains available as an alternate URL.
 

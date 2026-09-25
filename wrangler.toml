@@ -1,4 +1,9 @@
-# Cloudflare Pages: static site built by `npm run build` into dist/
+# REDLINE MX: static site served by Cloudflare Workers static assets.
+# `npm run deploy` builds with Vite into dist/ and uploads it; no server code.
 name = "redline-mx"
-pages_build_output_dir = "dist"
 compatibility_date = "2026-09-01"
+routes = [{ pattern = "redlinemx.mattvalancy.com", custom_domain = true }]
+
+[assets]
+directory = "./dist"
+not_found_handling = "404-page"

@@ -1,5 +1,7 @@
 # AI App Lab — CSCI 40, week 1
 
+**Play it live: https://redlinemx.mattvalancy.com** (REDLINE MX)
+
 Prompt an AI to build a web app. Then watch it test its own work in a live browser.
 
 ```bash

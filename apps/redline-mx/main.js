@@ -219,6 +219,9 @@ function aiInput(r, skill) {
 
 // ---------- HUD ----------
 const $ = (id) => document.getElementById(id);
+const speedLines = document.createElement('div');
+speedLines.id = 'speedlines';
+document.body.appendChild(speedLines);
 const hud = {
   tempLabel: document.querySelector('.temp label'), root: $('hud'), place: $('place'), timer: $('timer'), speed: $('speed'),
   heat: $('heat'), stats: $('stats'), progress: $('progress'), coins: $('race-coins'), ability: $('ability'),
@@ -523,16 +526,51 @@ const camPos = new THREE.Vector3(0, 6, 22);
 const camLook = new THREE.Vector3();
 const timer = new THREE.Timer();
 
+// On a crash the rider is thrown clear of the bike and tumbles, then climbs back on.
+const tmpV = new THREE.Vector3();
+const tmpQ = new THREE.Quaternion();
+function updateRagdoll(r, dt) {
+  const m = r.mesh;
+  if (r.crashed && !r.ragdoll) {
+    m.rider.getWorldPosition(tmpV);
+    m.rider.getWorldQuaternion(tmpQ);
+    r.ragdoll = { home: { p: m.rider.position.clone(), q: m.rider.quaternion.clone() }, v: new THREE.Vector3(r.speed * 0.5 + 4, 9, (Math.random() - 0.5) * 4), spin: new THREE.Vector3(Math.random() * 8, Math.random() * 4, 6 + Math.random() * 6) };
+    scene.attach(m.rider);
+    r.ragdolls = (r.ragdolls || 0) + 1;
+  }
+  if (r.ragdoll && r.crashed) {
+    const d = r.ragdoll;
+    d.v.y -= env.gravity * 0.7 * dt;
+    m.rider.position.addScaledVector(d.v, dt);
+    const floor = track.height(m.rider.position.x) - 0.6;
+    if (m.rider.position.y < floor) {
+      m.rider.position.y = floor;
+      d.v.y = Math.abs(d.v.y) * 0.35;
+      d.v.x *= 0.6;
+      d.spin.multiplyScalar(0.6);
+    }
+    m.rider.rotation.x += d.spin.x * dt;
+    m.rider.rotation.y += d.spin.y * dt;
+    m.rider.rotation.z += d.spin.z * dt;
+  } else if (r.ragdoll) {
+    m.body.add(m.rider);
+    m.rider.position.copy(r.ragdoll.home.p);
+    m.rider.quaternion.copy(r.ragdoll.home.q);
+    r.ragdoll = null;
+  }
+}
+
 function renderRiders(dt, t) {
   for (const r of riders) {
     const m = r.mesh;
+    updateRagdoll(r, dt);
     const lift = r.crashed ? 0.6 : Math.sin(r.wheelie) * WHEELBASE * 0.5;
     m.root.position.set(r.x, r.y + lift, r.z);
     m.root.rotation.z = r.pitch;
     const spin = (r.speed * dt) / WHEEL_R;
     m.rear.rotation.z -= spin;
     m.front.rotation.z -= spin;
-    m.rider.rotation.z += ((r.airborne ? -r.lean * 0.35 : -0.05) - m.rider.rotation.z) * Math.min(1, dt * 10);
+    if (!r.ragdoll) m.rider.rotation.z += ((r.airborne ? -r.lean * 0.35 : -0.05) - m.rider.rotation.z) * Math.min(1, dt * 10);
     const boosting = r.has('nitro') || r.has('afterburner') || r.has('slipstream');
     m.flame.visible = (r.turbo || boosting) && !r.crashed;
     if (m.flame.visible) m.flame.scale.set(boosting ? 1.8 : 1, (boosting ? 1.6 : 0.7) + Math.random() * 0.6, boosting ? 1.8 : 1);
@@ -568,10 +606,15 @@ function renderHUD() {
   hud.stats.innerHTML = `jumps ${player.jumps}<br>perfect ${player.perfects}<br>flips ${player.flips}<br>crashes ${player.crashes}<br>air ${player.maxAir.toFixed(2)}s${autopilot ? '<br><b style="color:#6cf">AUTOPILOT</b>' : ''}`;
 }
 
+let timeScale = 1;
 function frame(now) {
   timer.update(now);
   // Physics steps at a fixed 1/120s, so we can catch up on slow frames without slow-motion.
-  const dt = Math.min(timer.getDelta(), 1 / 8);
+  const realDt = Math.min(timer.getDelta(), 1 / 8);
+  // Cinematic slow-mo at the top of really big air (never on autopilot/tests' hot path for long).
+  const bigAir = state === 'racing' && player.airborne && player.airTime > 0.45 && Math.abs(player.vy) < 6;
+  timeScale += ((bigAir ? 0.45 : 1) - timeScale) * Math.min(1, realDt * 8);
+  const dt = realDt * timeScale;
   acc += dt;
   while (acc >= STEP) { simulate(STEP); acc -= STEP; }
   const t = timer.getElapsed();
@@ -611,6 +654,8 @@ function frame(now) {
   world.sun.target.position.set(camLook.x, 0, 0);
 
   if (state !== 'title' && state !== 'garage') renderHUD();
+  speedLines.classList.toggle('on', state === 'racing' && (player.has('nitro') || player.has('afterburner') || player.has('slipstream')));
+  document.body.classList.toggle('slowmo', timeScale < 0.8);
   audio.engine(player.speed, player.turbo, state === 'racing' || state === 'countdown');
   music.setIntensity(player.turbo || player.airborne || player.has('nitro') ? 1 : player.speed / 60);
   renderer.render(scene, camera);
@@ -650,6 +695,9 @@ const app = (window.__app = {
       cup: save.cup ? { round: save.cup.round, points: { ...save.cup.points } } : null,
       trophies: save.trophies,
       music: { playing: music.playing, bpm: music.bpm },
+      timeScale,
+      riderThrown: !!player.ragdoll,
+      ragdolls: player.ragdolls || 0,
       ghost: { loaded: !!ghostRun, visible: ghost.root.visible, x: ghost.root.position.x, samples: recording.length / 4 },
       ability,
       abilityUses,

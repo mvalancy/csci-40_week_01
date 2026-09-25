@@ -574,11 +574,18 @@ export function createWildlife(ctx) {
     const ty = (lead.y || 0) + 5.6 + (a.idx % 3) * 0.8 + Math.sin(time * 1.3 + a.seed) * 0.35;
     const tz = [2, -3, 3.5][a.idx % 3] + Math.sin(time * 0.7 + a.seed) * 0.6;
     if (!a.init || Math.abs(a.x - tx) > 120) {
-      a.init = true; a.x = tx; a.y = ty; a.z = tz; a.vx = a.vy = a.vz = 0;
+      a.init = true; a.x = tx; a.y = ty; a.z = tz; a.vx = a.vy = a.vz = 0; a.tx = tx; a.fdx = 0;
     }
+    // critically damped spring with velocity feed-forward so a fast leader
+    // doesn't leave the crew trailing behind
+    if (dt > 0) {
+      const lv = (tx - a.tx) / dt;
+      a.fdx = Math.abs(lv) < 150 ? approach(a.fdx, lv, dt * 6) : a.fdx;
+    }
+    a.tx = tx;
     const kS = 5;
     const c = 2 * Math.sqrt(kS);
-    const ax = (tx - a.x) * kS - a.vx * c;
+    const ax = (tx - a.x) * kS + (a.fdx - a.vx) * c;
     a.vx += ax * dt; a.vy += ((ty - a.y) * kS - a.vy * c) * dt; a.vz += ((tz - a.z) * kS - a.vz * c) * dt;
     a.x += a.vx * dt; a.y += a.vy * dt; a.z += a.vz * dt;
     a.yaw = angLerp(a.yaw, Math.atan2(-(lead.z - a.z), lead.x - a.x), dt * 4);
@@ -645,7 +652,8 @@ export function createWildlife(ctx) {
   function initAll(fx) {
     for (const sp of species) {
       const n = sp.groups.length;
-      sp.groups.forEach((g, i) => spawnGroup(sp, g, fx - 25 + ((i + 0.2 + R() * 0.6) / n) * 150));
+      // one group of each species right by the start line so the grid has company, the rest ahead
+      sp.groups.forEach((g, i) => spawnGroup(sp, g, i === 0 ? fx + rr(-4, 22) : fx + 22 + ((i - 1 + 0.2 + R() * 0.6) / Math.max(1, n - 1)) * 100));
     }
   }
 
@@ -653,7 +661,8 @@ export function createWildlife(ctx) {
     if (!species.length) return;
     dt = dt > 0 ? Math.min(dt, 0.05) : 0; // the game clock can hiccup backwards
     const fx = focus.x || 0;
-    fearBoost = Math.min(12, Math.max(0, (focus.speed || 0) * 0.25));
+    // Idling bikes on the start line don't bother anyone; moving ones do.
+    fearBoost = (focus.speed || 0) < 2 ? -100 : Math.min(12, (focus.speed || 0) * 0.25);
     if (!started) { started = true; initAll(fx); }
     for (const sp of species) {
       const { cfg } = sp;

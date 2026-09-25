@@ -103,3 +103,10 @@ body.touch .controls { display: none; }
 .cup-table .me { color: #ffcf40; }
 .bike-preview { display: block; width: 360px; max-width: 100%; height: auto; aspect-ratio: 360 / 200; margin: 0 0 10px; border-radius: 12px;
   background: radial-gradient(ellipse at 50% 80%, #2a2050, #0b0b18 70%); }
+#speedlines { position: fixed; inset: -20%; pointer-events: none; opacity: 0; transition: opacity .25s; z-index: 1;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, #fff0 0deg 5deg, #ffffff22 5deg 5.6deg);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 30%, #000 70%); mask: radial-gradient(circle at 50% 50%, transparent 30%, #000 70%);
+  animation: lines .25s linear infinite; }
+#speedlines.on { opacity: 1; }
+@keyframes lines { to { transform: rotate(3deg) scale(1.03); } }
+body.slowmo canvas { filter: saturate(1.25) contrast(1.05); }

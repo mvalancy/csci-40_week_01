@@ -165,11 +165,19 @@ test.describe('REDLINE MX', () => {
       await ai.waitFor((s) => s.player.airborne, { message: 'take-off' });
       await ai.say('airborne — leaning hard forward (wrong!)');
     });
-    await ai.step('hold → the whole flight', async () => {
-      await page.keyboard.down('ArrowRight');
-      const s = await ai.waitFor((s) => s.player.crashed, { message: 'crash' });
-      await page.keyboard.up('ArrowRight');
+    await ai.step('lean → until the nose points into the dirt', async () => {
+      // Hold forward only until ~70° nose-down vs the landing slope, so we don't spin a full frontflip.
+      const keys = keyHolder(page);
+      let s = await ai.state();
+      while (s.player.airborne && !s.player.crashed) {
+        await keys.set('ArrowRight', wrap(s.player.pitch - s.landingSlope) > -1.2);
+        s = await ai.state();
+      }
+      await keys.releaseAll();
+      s = await ai.waitFor((s) => s.player.crashes > 0, { message: 'crash' });
       await ai.check('crashed', s.player.crashes, (n) => n === 1);
+      const thrown = await ai.waitFor((s) => s.ragdolls > 0, { message: 'rider thrown' });
+      await ai.check('rider thrown clear of the bike', thrown.ragdolls, (n) => n === 1);
       await expect(page.locator('#callout')).toHaveText('CRASH!');
     });
     await ai.step('rider gets back on the bike', async () => {

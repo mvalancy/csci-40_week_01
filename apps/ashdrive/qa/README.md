@@ -8,7 +8,7 @@ npm run show -- ashdrive --right --config=apps/ashdrive/qa/playwright.config.js
 
 The three fixture tests cover desktop inputs, guided weapons, manual graphics settings, cameras, pause/redeployment, and portrait touch controls. The app-specific config disables video encoding and preserves screenshots.
 
-Export and build the standalone app, then serve it on port 4175 for release checks. Override `ASHDRIVE_URL` to test another preview or the public deployment.
+Build the app (`npm run build:ashdrive`) and serve it with `npx vite preview --config apps/ashdrive/standalone.vite.config.js --port 4175` for release checks. Override `ASHDRIVE_URL` to test another preview or the public deployment.
 
 ```sh
 ASHDRIVE_URL=http://localhost:4175/ node apps/ashdrive/qa/final-mission.mjs
@@ -21,4 +21,4 @@ ASHDRIVE_URL=http://localhost:4175/ node apps/ashdrive/qa/touch-landscape.mjs
 - `touch-landscape.mjs` emulates a coarse touch pointer at 844×390, sends real touch input for throttle/cannon, checks all controls and pause buttons fit, and rotates to portrait. Artifacts go to `/tmp/ashdrive-touch-landscape`.
 - `profile.mjs` captures visible/focused frame, CPU, GPU, and draw telemetry. Treat measurements taken while other browsers or screen recording are active as contention diagnostics, not an isolated FPS benchmark.
 
-Inspect the captured screenshots as well as assertions and browser-error logs. Browser specs and this QA folder stay in the shared lab and are excluded from standalone exports.
+Inspect the captured screenshots as well as assertions and browser-error logs. Browser specs and this QA folder stay in the shared lab.

@@ -12,7 +12,9 @@
     "setup": "npm install && playwright install chromium",
     "test": "node scripts/test.js test",
     "loop": "node scripts/loop.js",
-    "deploy": "vite build && npx --yes wrangler@4 pages deploy dist --project-name=csci-40-week-01-redline-mx --branch=main --commit-dirty=true"
+    "deploy": "vite build && npx --yes wrangler@4 pages deploy dist --project-name=csci-40-week-01-redline-mx --branch=main --commit-dirty=true",
+    "build:ashdrive": "vite build --config apps/ashdrive/standalone.vite.config.js",
+    "test:ashdrive": "node --test apps/ashdrive/tests/*.test.js"
   },
   "license": "MIT",
   "description": "AI App Lab — prompt a web app, watch the AI test it in a live browser. CSCI 40 week 1.",

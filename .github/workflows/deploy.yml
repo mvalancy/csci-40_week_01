@@ -16,11 +16,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - run: npm run build            # lab + REDLINE MX (csci-40-week-01-redline-mx)
+      - run: npm run test:ashdrive
+      - run: npm run build:ashdrive   # ASHDRIVE (csci-40-week-01-ashdrive)
       - uses: actions/upload-artifact@v5
         with:
           name: dist
           path: dist
 
-      # Deploys happen on Cloudflare's side: the Pages project csci-40-week-01-redline-mx
-      # is Git-connected to this repo and builds every push to main.
+      # Deploys happen on Cloudflare's side: both Pages projects are Git-connected
+      # to this repo and build every push to main. This job just catches breakage early.

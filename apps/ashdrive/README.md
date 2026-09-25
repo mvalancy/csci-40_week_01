@@ -2,7 +2,7 @@
 
 ![ASHDRIVE armored bike and industrial district](docs/preview.png)
 
-**[Play ASHDRIVE](https://ashdrive.mattvalancy.com)** · [Public MIT source](https://github.com/mvalancy/csci-40_week_01_ashdrive)
+**[Play ASHDRIVE](https://ashdrive.mattvalancy.com)** · [Source (MIT)](https://github.com/mvalancy/csci-40_week_01/tree/main/apps/ashdrive)
 
 An open-world combat sandbox: pilot a remotely controlled armored motorcycle and freely explore a hostile industrial district. Start on the ground at the motorpool, choose your route through factory yards and elevated freeways, fight interceptor drones and gunships, and raid three defended relays. Recover their data and return to the motorpool extraction pad when ready.
 
@@ -38,79 +38,28 @@ URL overrides are supported: `?quality=low`, `?quality=medium`, `?quality=high`,
 
 See [Performance architecture](docs/PERFORMANCE.md) for implementation details and validation boundaries.
 
-## Standalone development
+## Development and deploy
 
-Requires Node.js 22.12 or newer. In an exported or cloned standalone repository:
-
-```sh
-npm ci
-npm run dev
-```
-
-Verify gameplay math and create the static production build:
-
-```sh
-npm run test:unit
-npm run build
-npm run preview
-```
-
-`dist/` contains the full static site. The unit tests exercise gameplay calculations; they do not replace interactive browser testing. GitHub Actions runs unit tests and the production build on pushes and pull requests.
-
-## Shared AI App Lab development and release export
-
-The lab uses one root dependency installation. Do not create package.json or node_modules inside this app folder. From the lab root:
-
-```sh
-npm run dev
-npm run show ashdrive
-node --test apps/ashdrive/tests/*.test.js
-node apps/ashdrive/release.mjs /tmp/ashdrive-release
-cd /tmp/ashdrive-release
-npm install
-npm run test:unit
-npm run build
-```
-
-The exporter copies this game's source and pure unit tests, generates an MIT package with pinned installed dependency versions, and includes GitHub Actions and Cloudflare settings. Browser specs depend on the lab fixture and are excluded. The lab navigation link becomes a GitHub source link. An ownership manifest removes files from earlier exports when they disappear from the app, while retaining `.git`, installed dependencies, package-lock.json and unrelated local files. Re-export after game changes and run the release checks again. Commit package-lock.json with the exported source. The exporter itself remains in the lab.
-
-To build this app directly using shared dependencies:
-
-```sh
-npx vite build --config apps/ashdrive/standalone.vite.config.js
-```
-
-## Public GitHub and Cloudflare Pages release
-
-Public source: [mvalancy/csci-40_week_01_ashdrive](https://github.com/mvalancy/csci-40_week_01_ashdrive), licensed under MIT. Clone it to develop independently of the shared lab:
-
-```sh
-git clone https://github.com/mvalancy/csci-40_week_01_ashdrive.git
-cd csci-40_week_01_ashdrive
-npm ci
-npm run dev
-```
-
-The game is live at **[ashdrive.mattvalancy.com](https://ashdrive.mattvalancy.com)**, with [csci-40-week-01-ashdrive.pages.dev](https://csci-40-week-01-ashdrive.pages.dev) as an alternate address. The Cloudflare Pages project `csci-40-week-01-ashdrive` is **Git-connected** to that repo: every push to `main` runs `npm ci && npm run build` on Node 22 and deploys `dist/`.
-
-To publish by hand instead (for example from a local checkout), use an authenticated Wrangler installation:
+ASHDRIVE lives in the class monorepo, [mvalancy/csci-40_week_01](https://github.com/mvalancy/csci-40_week_01) (MIT), next to Claude's REDLINE MX. It uses the lab's single root dependency installation; there is no package.json inside this folder. From the repo root (Node.js 22.12+):
 
 ```sh
 npm ci
-npm run test:unit
-npm run build
-wrangler pages deploy dist --project-name csci-40-week-01-ashdrive --branch main
+npm run dev                         # lab hub → /apps/ashdrive/
+npm run show ashdrive --right       # headed browser tests (right half of the screen)
+npm run test:ashdrive               # pure unit tests (node --test)
+npm run build:ashdrive              # static build → apps/ashdrive/dist/
+npx vite preview --config apps/ashdrive/standalone.vite.config.js --port 4175
 ```
 
-Use Node.js 22, as declared in `.node-version`. `wrangler.toml` declares the `csci-40-week-01-ashdrive` project and `dist` output directory. `public/_headers` supplies static asset caching and response headers. The game requires no application server or runtime account connection.
+**Deploys are automatic.** The Cloudflare Pages project `csci-40-week-01-ashdrive` is Git-connected to the monorepo. Every push to `main` that touches `apps/ashdrive/` (or the root `package.json` / lockfile) runs `npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js` on Node 22 and publishes `apps/ashdrive/dist/` to **[ashdrive.mattvalancy.com](https://ashdrive.mattvalancy.com)** (alternate: [csci-40-week-01-ashdrive.pages.dev](https://csci-40-week-01-ashdrive.pages.dev)). `public/_headers` supplies static asset caching and response headers; the game needs no server.
 
-The custom hostname `ashdrive.mattvalancy.com` uses this Cloudflare DNS record:
+Manual fallback with an authenticated Wrangler: `npm run build:ashdrive && npx wrangler pages deploy apps/ashdrive/dist --project-name csci-40-week-01-ashdrive --branch main`.
+
+DNS for the custom hostname:
 
 | Type | Name | Target | Proxy |
 | --- | --- | --- | --- |
 | CNAME | `ashdrive` | `csci-40-week-01-ashdrive.pages.dev` | Proxied |
-
-Cloudflare Pages manages the certificate. The `pages.dev` address remains available as an alternate URL.
 
 Official documentation: [Wrangler Pages commands](https://developers.cloudflare.com/workers/wrangler/commands/pages/), [Pages custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/).
 

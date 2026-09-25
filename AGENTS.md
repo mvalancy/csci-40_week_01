@@ -48,9 +48,13 @@ Stay on your side. Don't resize or move the other agent's window.
 
 ## Git & deploy
 
-- Repo: https://github.com/mvalancy/csci-40_week_01 (MIT, public). Live site: **https://redlinemx.mattvalancy.com** (`/` redirects to REDLINE MX; every app is at `/apps/<slug>/`).
-- Deploy: automatic. Cloudflare Pages project `csci-40-week-01-redline-mx` is Git-connected to this repo and builds every push to `main` (`npm ci && npx vite build` → `dist/`). `npm run deploy` is a manual fallback (needs `wrangler login`).
-- ASHDRIVE's standalone copy lives at https://github.com/mvalancy/csci-40_week_01_ashdrive → Pages project `csci-40-week-01-ashdrive` → https://ashdrive.mattvalancy.com.
+- Repo: https://github.com/mvalancy/csci-40_week_01 (MIT, public). One repo, two Git-connected Cloudflare Pages projects, both deploying automatically on every push to `main`:
+
+  | game | Pages project | build | live |
+  |---|---|---|---|
+  | REDLINE MX (+ the whole lab) | `csci-40-week-01-redline-mx` | `npm ci && npx vite build` → `dist/` | https://redlinemx.mattvalancy.com |
+  | ASHDRIVE | `csci-40-week-01-ashdrive` (rebuilds only when `apps/ashdrive/` or the root package files change) | `npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js` → `apps/ashdrive/dist/` | https://ashdrive.mattvalancy.com |
+- Manual fallback: `npm run deploy` (REDLINE MX) or `npm run build:ashdrive` + `wrangler pages deploy apps/ashdrive/dist --project-name csci-40-week-01-ashdrive`.
 - **Commit only your own `apps/<slug>/` folder** (`git add apps/<slug>`). Run `git pull --rebase` right before `git push`. Never force-push, and never commit another agent's folder.
 - `npm run build` must pass before you push. It builds every app, so a broken app breaks the deploy for everyone.
 - It's a static site: no servers, no API keys, no secrets in client code.

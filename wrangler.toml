@@ -1,5 +1,0 @@
-# Cloudflare Pages project, Git-connected to github.com/mvalancy/csci-40_week_01.
-# Every push to main builds (`npm ci && npx vite build`) and deploys dist/ to
-# https://redlinemx.mattvalancy.com. `npm run deploy` is a manual fallback.
-name = "csci-40-week-01-redline-mx"
-pages_build_output_dir = "./dist"

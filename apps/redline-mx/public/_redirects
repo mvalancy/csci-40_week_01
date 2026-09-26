@@ -1,0 +1,4 @@
+# Old lab-era URLs → the game now lives at the site root
+/apps/redline-mx/showroom.html  /showroom.html  301
+/apps/redline-mx/*  /  301
+/apps/redline-mx  /  301

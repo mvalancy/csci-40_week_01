@@ -6,7 +6,7 @@ Everything below exists so you never step on each other.
 ## Layout
 
 ```
-week1/
+csci-40_f26_demos/
 ├── AGENTS.md / CLAUDE.md    this file (CLAUDE.md just imports it)
 ├── package.json             ONE shared set of libraries — see "Libraries"
 ├── index.html               hub: auto-lists every apps/*/meta.json
@@ -48,15 +48,17 @@ Stay on your side. Don't resize or move the other agent's window.
 
 ## Git & deploy
 
-- Repo: https://github.com/mvalancy/csci-40_week_01 (MIT, public). One repo, two Git-connected Cloudflare Pages projects, both deploying automatically on every push to `main`:
+- Repo: https://github.com/mvalancy/csci-40_f26_demos (MIT, public). One repo, two Git-connected Cloudflare Pages projects. Each game is served at the **root** of its own domain and redeploys automatically on every push to `main` that touches it:
 
   | game | Pages project | build | live |
   |---|---|---|---|
-  | REDLINE MX (+ the whole lab) | `csci-40-week-01-redline-mx` | `npm ci && npx vite build` → `dist/` | https://redlinemx.mattvalancy.com |
-  | ASHDRIVE | `csci-40-week-01-ashdrive` (rebuilds only when `apps/ashdrive/` or the root package files change) | `npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js` → `apps/ashdrive/dist/` | https://ashdrive.mattvalancy.com |
-- Manual fallback: `npm run deploy` (REDLINE MX) or `npm run build:ashdrive` + `wrangler pages deploy apps/ashdrive/dist --project-name csci-40-week-01-ashdrive`.
+  | REDLINE MX | `csci-40-week-01-redline-mx` (rebuilds when `apps/redline-mx/` or the root package files change) | `npm ci && npx vite build --config apps/redline-mx/standalone.vite.config.js` → `apps/redline-mx/dist/` | https://redlinemx.mattvalancy.com |
+  | ASHDRIVE | `csci-40-week-01-ashdrive` (rebuilds when `apps/ashdrive/` or the root package files change) | `npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js` → `apps/ashdrive/dist/` | https://ashdrive.mattvalancy.com |
+- An app with its own `standalone.vite.config.js` builds with relative paths (`base: './'`) and is left out of the lab build. The lab hub is local-only and isn't deployed.
+- Cloudflare settings are code: `npm run setup:cloudflare` (add `-- --dry-run` to preview) applies the table above. Edit `scripts/cloudflare-setup.js` instead of the dashboard.
+- Manual fallback: `npm run deploy` (REDLINE MX) or `npm run deploy:ashdrive`.
 - **Commit only your own `apps/<slug>/` folder** (`git add apps/<slug>`). Run `git pull --rebase` right before `git push`. Never force-push, and never commit another agent's folder.
-- `npm run build` must pass before you push. It builds every app, so a broken app breaks the deploy for everyone.
+- `npm run build` must pass before you push. It builds the lab plus each standalone game, so a broken app breaks the deploy for everyone.
 - It's a static site: no servers, no API keys, no secrets in client code.
 
 ## Libraries (already installed — just `import` them)

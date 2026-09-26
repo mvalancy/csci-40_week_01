@@ -33,7 +33,7 @@ const tacticalMap = createTacticalMap(world);
 let mapPreviousMode = 'playing';
 let graphics, renderDirty = true;
 try { graphics = await createRendering($('world'), scene, camera); }
-catch (error) { $('loading').textContent = 'GRAPHICS UNAVAILABLE — PLEASE TRY AN UPDATED BROWSER'; throw error; }
+catch (error) { window.__boot?.noGpu(); throw error; }
 const { renderer } = graphics; renderer.domElement.tabIndex = 0;
 scene.environment = createEnvironment(THREE); scene.environmentIntensity = .85;
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -415,7 +415,7 @@ renderer.setAnimationLoop(now => {
   const rendered = state.mode !== 'paused' || renderDirty;
   if (rendered) { renderer.info.reset(); graphics.render(); renderDirty = false; }
   state.performance = { updateMs: Math.round((simulationMs + presentationMs)*10)/10, simulationMs: Math.round(simulationMs*10)/10, presentationMs: Math.round(presentationMs*10)/10, qualityMs: Math.round(qualityMs*10)/10, renderMs: Math.round((performance.now()-renderStart)*10)/10, simulationSteps, rendered, gpu: graphics.gpuTiming, drawCalls: rendered ? renderer.info.render.drawCalls ?? renderer.info.render.calls : 0, triangles: rendered ? renderer.info.render.triangles : 0 };
-  state.frames++; state.ready = true; $('loading').hidden = true;
+  state.frames++; if (!state.ready) { window.__boot?.done(); state.ready = window.__boot?.gone ?? true; }
   fpsTime += rawDt; if (rendered) fpsFrames++;
   if (fpsTime > 1) { state.fps = Math.round(fpsFrames / fpsTime); fpsTime = 0; fpsFrames = 0; }
 });

@@ -1,8 +1,10 @@
-# CSCI 40 · Week 1 — AI App Lab
+# CSCI 40 · Fall 2026 Demos
 
-Prompt an AI to build a web game. Then watch it test its own work in a live browser.
+A growing collection of web apps and games built live in CSCI 40 (Fall 2026) with AI coding agents. Prompt an AI to build something, then watch it test its own work in a live browser. New demos land in `apps/` as the semester goes on.
 
-This week two coding agents got the same prompt, *"build a cool bike game"*, and built side by side in this one repo, sharing the same libraries, dev server and test harness. Both games deploy from here to Cloudflare Pages on every push.
+## Week 1: the bike game code-off
+
+In week one, two coding agents got the same prompt, *"build a cool bike game"*, and built side by side in this one repo, sharing the same libraries, dev server and test harness. Both games deploy from here to Cloudflare Pages on every push.
 
 ## Side by side
 
@@ -45,12 +47,25 @@ The rules every agent follows (folder ownership, shared libraries, screen halves
 
 ## Deploys
 
-One repo, two Git-connected Cloudflare Pages projects. Every push to `main` rebuilds:
+One repo, two Git-connected Cloudflare Pages projects. Each game is served at the root of its own domain, and every push to `main` that touches that game rebuilds it:
 
 | project | build command | output | domain |
 |---|---|---|---|
-| `csci-40-week-01-redline-mx` | `npm ci && npx vite build` | `dist/` (whole lab; `/` redirects to REDLINE MX) | redlinemx.mattvalancy.com |
-| `csci-40-week-01-ashdrive` | `npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js` | `apps/ashdrive/dist/` | ashdrive.mattvalancy.com |
+| `csci-40-week-01-redline-mx` | `npm ci && npx vite build --config apps/redline-mx/standalone.vite.config.js` | `apps/redline-mx/dist/` | [redlinemx.mattvalancy.com](https://redlinemx.mattvalancy.com) |
+| `csci-40-week-01-ashdrive` | `npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js` | `apps/ashdrive/dist/` | [ashdrive.mattvalancy.com](https://ashdrive.mattvalancy.com) |
+
+Those settings live in [`scripts/cloudflare-setup.js`](scripts/cloudflare-setup.js). No dashboard clicking:
+
+```bash
+npx wrangler login                          # once
+npm run setup:cloudflare -- --dry-run       # show what would change
+npm run setup:cloudflare                    # apply build settings, watch paths, env vars, custom domains
+npm run deploy                              # manual REDLINE MX deploy (fallback); npm run deploy:ashdrive for ASHDRIVE
+```
+
+The lab hub (`npm run dev`) is for class only and isn't deployed.
+
+**Game shows "3D graphics are switched off"?** The browser has WebGL disabled, which usually happens after a GPU crash. Open `chrome://restart`, then check that `chrome://gpu` lists WebGL as *Hardware accelerated*.
 
 ## License
 

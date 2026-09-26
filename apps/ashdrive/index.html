@@ -1,9 +1,61 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="./favicon.svg"/><title>ASHDRIVE — Shadow Sector</title><link rel="stylesheet" href="./style.css"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="./favicon.svg"/><title>ASHDRIVE — Shadow Sector</title><link rel="stylesheet" href="./style.css">
+<!-- Loading screen styles are inline so they paint before anything else downloads. -->
+<style>
+html,body{background:#161915}
+#boot{position:fixed;inset:0;z-index:100;display:grid;place-content:center;justify-items:start;gap:18px;padding:24px 8%;background:linear-gradient(90deg,#12160f 0%,#161915 60%,#1e2219 100%);color:#e7e0d1;font-family:Arial,Helvetica,sans-serif;transition:opacity .35s}
+#boot.out{opacity:0;pointer-events:none}
+#boot .eyebrow{font:9px monospace;color:#e9ad52;letter-spacing:3px}
+#boot .logo{font-size:clamp(56px,9vw,120px);line-height:.85;letter-spacing:-6px;font-style:italic;font-weight:900;color:#e1e0ce;text-shadow:3px 4px 0 #0005}
+#boot .logo span{color:#d8944d}
+#boot .bar{width:min(340px,80vw);height:3px;background:#434938;overflow:hidden}
+#boot .bar i{display:block;width:35%;height:100%;background:#e9ad52;animation:boot-scan 1.2s ease-in-out infinite}
+@keyframes boot-scan{from{transform:translateX(-100%)}to{transform:translateX(290%)}}
+#boot #loading{position:static;transform:none;background:none;padding:0;font:10px monospace;letter-spacing:3px;color:#c7cdb3}
+#boot.failed .bar{display:none}
+#boot.failed #loading{color:#e9ad52;font-size:12px}
+#boot-help{max-width:560px;font:13px/1.7 Arial,Helvetica,sans-serif;color:#c7cdb3}
+#boot-help code{font-family:monospace;background:#2b3226;padding:1px 6px;user-select:all;color:#eee4cb}
+#boot-help button{min-width:0;margin-top:8px}
+</style></head>
 <body>
+<div id="boot" role="status" aria-live="polite"><div class="eyebrow">REMOTE PILOT AUTHORIZED / OPERATION 07</div><div class="logo">ASH<br><span>DRIVE</span></div><div class="bar"><i></i></div><div id="loading">INITIALIZING COMBAT SYSTEMS…</div><div id="boot-help" hidden></div></div>
+<script>
+// Loading screen: visible from the first paint, removed by main.js once the first
+// frame is on screen. window.__boot.gone tells tests it has cleared.
+(() => {
+  const boot = document.getElementById('boot'), status = document.getElementById('loading'), help = document.getElementById('boot-help');
+  const api = window.__boot = {
+    gone: false,
+    status(text) { status.textContent = text; },
+    done() {
+      if (boot.classList.contains('out') || boot.classList.contains('failed')) return;
+      boot.classList.add('out');
+      setTimeout(() => { boot.remove(); api.gone = true; }, 350);
+    },
+    fail(title, html) {
+      boot.classList.add('failed'); status.textContent = title;
+      help.innerHTML = html + '<button onclick="location.reload()">RETRY UPLINK ↗</button>'; help.hidden = false;
+    },
+    noGpu() {
+      api.fail('GRAPHICS UNAVAILABLE — 3D ACCELERATION IS SWITCHED OFF', `
+        <p>ASHDRIVE needs WebGPU or WebGL 2, and this browser isn't offering either right now.</p>
+        <ol>
+          <li><b>Restart the browser completely</b> by opening <code>chrome://restart</code>. After a GPU crash, Chrome turns graphics off until it restarts.</li>
+          <li>Make sure <code>chrome://settings/system</code> → “Use graphics acceleration when available” is on.</li>
+          <li>Open <code>chrome://gpu</code>: “WebGL” should say <i>Hardware accelerated</i>. If it doesn't, update your graphics driver.</li>
+        </ol>`);
+    },
+  };
+  // A script that fails to download or crashes during startup would otherwise leave the bar scanning forever.
+  addEventListener('error', () => {
+    if (!api.gone && !boot.classList.contains('failed')) api.fail('UPLINK FAILED — COULD NOT START', '<p>Something went wrong while loading. Check your connection and try again.</p>');
+  }, true);
+})();
+</script>
 <div id="world"></div><div class="vignette"></div>
-<header><a href="https://github.com/mvalancy/csci-40_week_01/tree/main/apps/ashdrive">↗ SOURCE / MIT</a><div class="brand">ASH<span>DRIVE</span><small>REMOTE COMBAT SYSTEM / CODEX</small></div><div class="live"><i></i> UPLINK ESTABLISHED <b>2095</b></div></header>
+<header><a href="https://github.com/mvalancy/csci-40_f26_demos/tree/main/apps/ashdrive">↗ SOURCE / MIT</a><div class="brand">ASH<span>DRIVE</span><small>REMOTE COMBAT SYSTEM / CODEX</small></div><div class="live"><i></i> UPLINK ESTABLISHED <b>2095</b></div></header>
 <div id="telemetry"><div class="label">SECTOR 07 <span>■ LIVE</span></div><h2>SHADOW SECTOR</h2><div class="rule"></div><p>DISABLE THE RELAYS.<br>RECOVER. EXTRACT.</p><canvas id="radar" width="170" height="170" aria-label="Arena radar"></canvas><div class="coords" id="coords">X 000 / Z 000</div></div>
 <div id="scoreboard"><div class="label">BOUNTY</div><div id="score">000000</div><div class="wave">WAVE <b id="wave">01</b> <span id="hunters">3 HOSTILES</span></div></div>
 <div id="reticle">+</div><div id="notice" aria-live="polite"></div>
@@ -20,5 +72,5 @@
     <p class="pause-shortcut">P / ESC · RESUME &nbsp; TAB · SELECT</p>
   </div>
 </section>
-<div id="mission">OPERATION 07 / DISABLE 3 RELAYS</div><div id="weapon">30 MM AUTOCANNON<br>MISSILES <b id="rockets">08</b> · EMP <b id="emp">READY</b></div><div id="damage-flash"></div><div id="loading">INITIALIZING COMBAT SYSTEMS…</div><div id="field-actions"><label class="quality-control"><select id="quality-select" aria-label="Graphics quality"><option value="auto">AUTO QUALITY</option><option value="high">HIGH DETAIL</option><option value="ultra">ULTRA DETAIL</option><option value="medium">BALANCED</option><option value="low">PERFORMANCE</option></select><span id="quality-status">MEASURING FPS</span></label><button id="map-toggle" aria-label="Open tactical map">TAB / MAP</button><button id="pause-toggle" aria-label="Pause or resume">Ⅱ</button><button id="audio-toggle" aria-label="Toggle sound">SOUND</button></div><div id="touch"><button data-key="KeyA" aria-label="Steer left">◀</button><button data-key="KeyD" aria-label="Steer right">▶</button><button data-key="KeyW">GO</button><button data-key="Space">FIRE</button><button data-key="ShiftLeft">BOOST</button><button data-action="missile">ROCKET</button><button data-action="emp">EMP</button><button data-action="camera">VIEW</button></div>
+<div id="mission">OPERATION 07 / DISABLE 3 RELAYS</div><div id="weapon">30 MM AUTOCANNON<br>MISSILES <b id="rockets">08</b> · EMP <b id="emp">READY</b></div><div id="damage-flash"></div><div id="field-actions"><label class="quality-control"><select id="quality-select" aria-label="Graphics quality"><option value="auto">AUTO QUALITY</option><option value="high">HIGH DETAIL</option><option value="ultra">ULTRA DETAIL</option><option value="medium">BALANCED</option><option value="low">PERFORMANCE</option></select><span id="quality-status">MEASURING FPS</span></label><button id="map-toggle" aria-label="Open tactical map">TAB / MAP</button><button id="pause-toggle" aria-label="Pause or resume">Ⅱ</button><button id="audio-toggle" aria-label="Toggle sound">SOUND</button></div><div id="touch"><button data-key="KeyA" aria-label="Steer left">◀</button><button data-key="KeyD" aria-label="Steer right">▶</button><button data-key="KeyW">GO</button><button data-key="Space">FIRE</button><button data-key="ShiftLeft">BOOST</button><button data-action="missile">ROCKET</button><button data-action="emp">EMP</button><button data-action="camera">VIEW</button></div>
 <script type="module" src="./main.js"></script></body></html>

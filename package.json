@@ -1,9 +1,9 @@
 {
-  "name": "csci-40_week_01",
+  "name": "csci-40_f26_demos",
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run build:redline && npm run build:ashdrive",
     "preview": "vite preview",
     "show": "node scripts/test.js show",
     "demo": "node scripts/test.js show redline-mx",
@@ -12,12 +12,15 @@
     "setup": "npm install && playwright install chromium",
     "test": "node scripts/test.js test",
     "loop": "node scripts/loop.js",
-    "deploy": "vite build && npx --yes wrangler@4 pages deploy dist --project-name=csci-40-week-01-redline-mx --branch=main --commit-dirty=true",
+    "deploy": "npm run build:redline && npx --yes wrangler@4 pages deploy apps/redline-mx/dist --project-name=csci-40-week-01-redline-mx --branch=main --commit-dirty=true",
+    "deploy:ashdrive": "npm run build:ashdrive && npx --yes wrangler@4 pages deploy apps/ashdrive/dist --project-name=csci-40-week-01-ashdrive --branch=main --commit-dirty=true",
+    "setup:cloudflare": "node scripts/cloudflare-setup.js",
+    "build:redline": "vite build --config apps/redline-mx/standalone.vite.config.js",
     "build:ashdrive": "vite build --config apps/ashdrive/standalone.vite.config.js",
     "test:ashdrive": "node --test apps/ashdrive/tests/*.test.js"
   },
   "license": "MIT",
-  "description": "AI App Lab — prompt a web app, watch the AI test it in a live browser. CSCI 40 week 1.",
+  "description": "CSCI 40 · Fall 2026 demos: web apps and games built live in class with AI coding agents, each tested in a real browser.",
   "type": "module",
   "dependencies": {
     "cannon-es": "^0.20.0",
@@ -35,7 +38,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mvalancy/csci-40_week_01.git"
+    "url": "https://github.com/mvalancy/csci-40_f26_demos.git"
   },
   "engines": {
     "node": ">=20.19"

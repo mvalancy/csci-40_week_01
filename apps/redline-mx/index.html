@@ -2,12 +2,74 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="data:," />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>REDLINE MX</title>
     <link rel="stylesheet" href="./style.css" />
-  </head>
+    <!-- Loading screen styles live inline so they paint before anything else downloads. -->
+    <style>
+      html, body { background: #0b0b0f; }
+      #boot { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; gap: 22px; padding: 24px;
+        background: radial-gradient(ellipse at 50% 40%, #2a1015 0%, #0b0b0f 70%); color: #fff; font-family: system-ui, sans-serif; text-align: center; transition: opacity .3s; }
+      #boot.out { opacity: 0; pointer-events: none; }
+      #boot .logo { font-size: clamp(48px, 11vw, 120px); font-weight: 900; font-style: italic; letter-spacing: -2px; line-height: 1; color: #ff3b30; text-shadow: 0 5px 0 #7a0b00; }
+      #boot .logo span { color: #ffd23d; text-shadow: 0 5px 0 #8a5a00; }
+      #boot .logo em { font-size: .35em; color: #6cf; vertical-align: top; text-shadow: none; margin-left: 4px; }
+      #boot .bar { width: min(360px, 80vw); height: 8px; border-radius: 4px; background: #ffffff18; overflow: hidden; }
+      #boot .bar i { display: block; width: 40%; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #ff3b30, #ffd23d); animation: boot-rev 1.1s ease-in-out infinite; }
+      @keyframes boot-rev { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+      #boot-status { margin: 0; font-size: 14px; letter-spacing: 4px; color: #fffc; text-transform: uppercase; }
+      #boot.failed .bar { display: none; }
+      #boot.failed #boot-status { color: #ffd23d; font-weight: 700; }
+      #boot-help { max-width: 560px; font-size: 15px; line-height: 1.55; color: #fffd; text-align: left; }
+      #boot-help code { background: #ffffff1c; padding: 1px 6px; border-radius: 4px; user-select: all; }
+      #boot-help button { margin-top: 10px; font: 700 14px system-ui; letter-spacing: 2px; padding: 10px 22px; border: 0; border-radius: 6px; background: #ffd23d; color: #111; cursor: pointer; }
+    </style>  </head>
   <body>
+    <div id="boot" role="status" aria-live="polite">
+      <div class="logo">RED<span>LINE</span><em>MX</em></div>
+      <div class="bar"><i></i></div>
+      <p id="boot-status">Warming up the engine…</p>
+      <div id="boot-help" hidden></div>
+    </div>
+    <script>
+      // Loading screen: visible from the first paint, removed by main.js once the
+      // first frames are on screen. window.__boot.gone tells tests it has cleared.
+      (() => {
+        const boot = document.getElementById('boot');
+        const status = document.getElementById('boot-status');
+        const help = document.getElementById('boot-help');
+        if (location.search.includes('race')) status.textContent = 'Loading race…';
+        const api = (window.__boot = {
+          gone: false,
+          status(text) { status.textContent = text; },
+          done() {
+            if (boot.classList.contains('out') || boot.classList.contains('failed')) return;
+            boot.classList.add('out');
+            setTimeout(() => { boot.remove(); api.gone = true; }, 300);
+          },
+          fail(title, html) {
+            boot.classList.add('failed');
+            status.textContent = title;
+            help.innerHTML = html + '<button onclick="location.reload()">TRY AGAIN</button>';
+            help.hidden = false;
+          },
+          noGpu() {
+            api.fail('3D graphics are switched off', `
+              <p>REDLINE MX needs WebGL 2, and this browser isn't offering it right now.</p>
+              <ol>
+                <li><b>Restart the browser completely</b> by opening <code>chrome://restart</code>. After a GPU crash, Chrome turns graphics off until it restarts.</li>
+                <li>Make sure <code>chrome://settings/system</code> → “Use graphics acceleration when available” is on.</li>
+                <li>Open <code>chrome://gpu</code>: “WebGL” should say <i>Hardware accelerated</i>. If it doesn't, update your graphics driver.</li>
+              </ol>`);
+          },
+        });
+        // A script that fails to download or crashes during startup would otherwise leave the bar spinning forever.
+        addEventListener('error', () => {
+          if (!api.gone && !boot.classList.contains('failed')) api.fail("Couldn't start", '<p>Something went wrong while loading. Check your connection and try again.</p>');
+        }, true);
+      })();
+    </script>
     <div id="hud" hidden>
       <div class="tl">
         <div id="place" class="place">1<sup>st</sup></div>
@@ -40,7 +102,7 @@
     </div>
     <div id="results" class="screen" hidden></div>
     <div id="garage" class="garage" hidden></div>
-    <a class="back" href="/">← hub</a>
+    <a class="back" href="https://github.com/mvalancy/csci-40_f26_demos/tree/main/apps/redline-mx" target="_blank" rel="noopener">↗ source on GitHub · MIT</a>
     <script type="module" src="./main.js"></script>
   </body>
 </html>

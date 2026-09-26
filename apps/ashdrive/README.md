@@ -2,7 +2,7 @@
 
 ![ASHDRIVE armored bike and industrial district](docs/preview.png)
 
-**[Play ASHDRIVE](https://ashdrive.mattvalancy.com)** · [Source (MIT)](https://github.com/mvalancy/csci-40_week_01/tree/main/apps/ashdrive)
+**[Play ASHDRIVE](https://ashdrive.mattvalancy.com)** · [Source (MIT)](https://github.com/mvalancy/csci-40_f26_demos/tree/main/apps/ashdrive)
 
 An open-world combat sandbox: pilot a remotely controlled armored motorcycle and freely explore a hostile industrial district. Start on the ground at the motorpool, choose your route through factory yards and elevated freeways, fight interceptor drones and gunships, and raid three defended relays. Recover their data and return to the motorpool extraction pad when ready.
 
@@ -40,7 +40,7 @@ See [Performance architecture](docs/PERFORMANCE.md) for implementation details a
 
 ## Development and deploy
 
-ASHDRIVE lives in the class monorepo, [mvalancy/csci-40_week_01](https://github.com/mvalancy/csci-40_week_01) (MIT), next to Claude's REDLINE MX. It uses the lab's single root dependency installation; there is no package.json inside this folder. From the repo root (Node.js 22.12+):
+ASHDRIVE lives in the class monorepo, [mvalancy/csci-40_f26_demos](https://github.com/mvalancy/csci-40_f26_demos) (MIT), next to Claude's REDLINE MX. It uses the lab's single root dependency installation; there is no package.json inside this folder. From the repo root (Node.js 22.12+):
 
 ```sh
 npm ci

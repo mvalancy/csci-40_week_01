@@ -28,7 +28,9 @@ if (params.get('bike') && bikeById(params.get('bike')).id === params.get('bike')
 const biome = biomeById(save.biome);
 
 // ---------- renderer / scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+catch (error) { window.__boot?.noGpu(); throw error; }
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -707,6 +709,7 @@ function frame(now) {
   perf.render = ema(perf.render, performance.now() - tr);
   perf.frame = ema(perf.frame, performance.now() - t0);
   app.frames += 1;
+  if (app.frames === 2) window.__boot?.done(); // first frames are on screen (shaders compiled) — lift the loading screen
 }
 
 addEventListener('resize', () => {
@@ -720,7 +723,8 @@ addEventListener('resize', () => {
 // Tests call ai.state() which reads __app.snapshot(). Keep it plain data.
 const app = (window.__app = {
   frames: 0,
-  get ready() { return this.frames > 5; },
+  // Ready once a few frames have drawn and the loading screen has cleared.
+  get ready() { return this.frames > 5 && (window.__boot?.gone ?? true); },
   snapshot() {
     const p = player;
     return {

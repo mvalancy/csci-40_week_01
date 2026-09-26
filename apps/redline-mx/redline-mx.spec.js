@@ -120,15 +120,20 @@ test.describe('REDLINE MX', () => {
     const { mud } = await debug(page, 'track');
     test.skip(!mud.length, 'this track seed has no mud');
     const patch = mud[0];
-    await ai.step(`jump to the mud at ${Math.round(patch.x0)}m, lane ${patch.lanes[0]}`, async () => {
+    await ai.step(`drop onto the edge of the mud at ${Math.round(patch.x0)}m, lane ${patch.lanes[0]}`, async () => {
       await page.keyboard.down('z'); // throttle first so slowMo can't make us coast
-      await debug(page, 'teleport', patch.x0 - 30, patch.lanes[0], 30);
-      const s = await ai.state();
-      await ai.check('arriving at speed', s.player.speed, (v) => v > 25);
+      // Start right at the edge, on the ground: from further back the whoops
+      // before a patch can launch the bike clean over the mud (a legit move).
+      await debug(page, 'teleport', patch.x0 + 0.5, patch.lanes[0], 30);
+      await ai.waitFor((s) => s.player.patch, { timeout: 5_000, message: 'wheels in the mud' });
     });
     await ai.step('speed collapses in the mud', async () => {
-      const s = await ai.waitFor((s) => s.player.x > patch.x0 + 10, { message: 'inside the mud' });
-      await ai.check('mud speed ≤ 14', s.player.speed, (v) => v <= 14.5);
+      // Mud caps you at 13, softened by the bike's tyre grip (starter bike: 0.8 → 16.8).
+      const { maxSpeed, grip } = (await ai.state()).player.stats;
+      const mudCap = maxSpeed + (13 - maxSpeed) * grip;
+      const s = await ai.waitFor((s) => s.player.speed <= mudCap + 0.5 || s.player.x > patch.x1 || s.player.airborne, { message: 'mud to bite' });
+      await ai.check('slowed while still inside the patch', s.player.x, (x) => x < patch.x1);
+      await ai.check(`mud speed ≤ ${mudCap.toFixed(1)}`, s.player.speed, (v) => v <= mudCap + 0.5);
     });
     await ai.step('recovers after the mud', async () => {
       const s = await ai.waitFor((s) => s.player.x > patch.x1 + 10 && s.player.speed > 25, { message: 'recovery' });
@@ -459,7 +464,8 @@ test.describe('REDLINE MX pickups', () => {
     });
     await ai.step('nitro boost', async () => {
       await grab('nitro');
-      const s = await ai.state();
+      // Nitro needs a moment to push past the normal 32 top speed (throttle alone never can).
+      const s = await ai.waitFor((s) => s.player.speed > 33, { timeout: 5_000, message: 'nitro kick' });
       await ai.check('nitro above normal top speed', s.player.speed, (v) => v > 33);
     });
     await page.keyboard.up('z');

@@ -27,7 +27,9 @@ export default defineConfig({
   outputDir: `test-results/${out}`,
   timeout: 300_000, // generous: classroom machines may be running several agents at once
   fullyParallel: !SHOW,
-  workers: SHOW ? 1 : undefined,
+  // Every test boots a full 3D game on the one GPU. More than a few at once
+  // starves them all (renderer warm-up timeouts), so cap it. WORKERS=n overrides.
+  workers: SHOW ? 1 : +(process.env.WORKERS || 4),
   reporter: [['list'], ['html', { open: 'never', outputFolder: `playwright-report/${out}` }]],
   use: {
     baseURL: `http://localhost:${PORT}`,
@@ -49,7 +51,9 @@ export default defineConfig({
         '--autoplay-policy=no-user-gesture-required',
         '--ignore-gpu-blocklist',
         '--enable-unsafe-swiftshader', // software WebGL fallback if there is no GPU
-        ...(SHOW ? [] : ['--enable-gpu', '--use-angle=vulkan', '--enable-features=Vulkan']),
+        // ANGLE's OpenGL backend: the Vulkan one intermittently fails to link
+        // shadow (MeshDepthMaterial) shaders in Chromium 153 on NVIDIA.
+        ...(SHOW ? [] : ['--enable-gpu', '--use-angle=gl']),
       ],
     },
   },

@@ -125,7 +125,8 @@ Also available: `ai.tap(key)`, `ai.state(hookName)`, `page.mouse.move(x, y, { st
 
 ## Gotchas
 
-- Headless runs use full Chromium with the GPU (`channel: 'chromium'` + Vulkan flags). The default headless shell renders WebGL in software at ~2 fps. Keep that config.
+- Headless runs use full Chromium with the GPU (`channel: 'chromium'` + `--use-angle=gl`). The default headless shell renders WebGL in software at ~2 fps, and the Vulkan backend randomly fails shadow-shader links. Keep that config.
+- Headless runs use 4 workers: every test boots a whole 3D game on one GPU, and 12 at once time out. Override with `WORKERS=n npm test <slug>`.
 - Simulate with a fixed timestep and clamp `dt`, so slow frames don't break the physics.
 - three.js r186: use `THREE.Timer` (not `Clock`) and `PCFShadowMap` (not `PCFSoftShadowMap`).
 - Add `<link rel="icon" href="data:," />` to your page head to avoid a favicon 404.

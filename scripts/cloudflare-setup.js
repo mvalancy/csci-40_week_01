@@ -21,14 +21,14 @@ const GAMES = [
     domain: 'redlinemx.mattvalancy.com',
     build_command: 'npm ci && npx vite build --config apps/redline-mx/standalone.vite.config.js',
     destination_dir: 'apps/redline-mx/dist',
-    path_includes: ['apps/redline-mx/*', 'package.json', 'package-lock.json'],
+    path_includes: ['apps/redline-mx/*', 'shared/lib/*', 'package.json', 'package-lock.json'],
   },
   {
     project: 'csci-40-week-01-ashdrive',
     domain: 'ashdrive.mattvalancy.com',
     build_command: 'npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js',
     destination_dir: 'apps/ashdrive/dist',
-    path_includes: ['apps/ashdrive/*', 'package.json', 'package-lock.json'],
+    path_includes: ['apps/ashdrive/*', 'shared/lib/*', 'package.json', 'package-lock.json'],
   },
 ];
 

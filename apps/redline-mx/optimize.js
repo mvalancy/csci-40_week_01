@@ -42,7 +42,8 @@ export function mergeStatic(group, keep = []) {
 // Bike from bikes.js: merge the frame, each wheel, and the rider separately
 // so the parts the game animates keep moving independently.
 export function optimizeBike(bike) {
-  const keep = [bike.rear, bike.front, bike.rider, bike.flame, ...(bike.extras || [])];
+  // Suspension links (fork legs, swingarms) stretch every frame, so they stay separate too.
+  const keep = [bike.rear, bike.front, bike.rider, bike.flame, ...(bike.extras || []), ...(bike.links || []).map((l) => l.mesh)];
   mergeStatic(bike.body, keep);
   mergeStatic(bike.rear, bike.extras);
   mergeStatic(bike.front, bike.extras);

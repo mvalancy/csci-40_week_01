@@ -17,7 +17,8 @@
     "setup:cloudflare": "node scripts/cloudflare-setup.js",
     "build:redline": "vite build --config apps/redline-mx/standalone.vite.config.js",
     "build:ashdrive": "vite build --config apps/ashdrive/standalone.vite.config.js",
-    "test:ashdrive": "node --test apps/ashdrive/tests/*.test.js"
+    "test:ashdrive": "node --test apps/ashdrive/tests/*.test.js",
+    "test:lib": "node --test shared/lib/tests/"
   },
   "license": "MIT",
   "description": "CSCI 40 · Fall 2026 demos: web apps and games built live in class with AI coding agents, each tested in a real browser.",

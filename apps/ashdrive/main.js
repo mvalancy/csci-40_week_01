@@ -12,6 +12,7 @@ import { createAudio } from './audio.js';
 import { stepVertical } from './physics.js';
 import { buildRoute } from './route.js';
 import { createTacticalMap } from './tactical-map.js';
+import { createBikeRide } from './suspension.js';
 
 const elements = new Map();
 const $ = id => { if (!elements.has(id)) elements.set(id, document.getElementById(id)); return elements.get(id); };
@@ -26,6 +27,7 @@ Object.assign(sunlight.shadow.camera, { left: -65, right: 65, top: 65, bottom: -
 sunlight.shadow.bias = -.0008; sunlight.shadow.normalBias = .65; scene.add(sunlight.target);
 const world = createWorld(THREE, scene);
 const bike = createCombatBike(THREE); scene.add(bike); bike.traverse(m => { if (m.isMesh) m.castShadow = true; });
+const ride = createBikeRide(bike, world);
 const fx = createEffects(THREE, scene);
 const mission = createMission(THREE, scene, world);
 const navigation = createNavigation(THREE, camera);
@@ -61,7 +63,7 @@ function clean(items) { for (const item of items) { scene.remove(item.mesh); if 
 function start(autopilot = false) {
   for (const list of [enemies, bullets, pickups]) clean(list); fx.clear(); mission.reset();
   Object.assign(state, { mode: 'playing', freeRoam: false, health: 100, energy: 100, score: 0, wave: 1, shots: 0, kills: 0, speed: 0, boosted: false, x: world.spawnPoint.x, y: world.spawnPoint.y, z: world.spawnPoint.z, heading: 0, autopilot, missiles: 8, missilesFired: 0, empCooldown: 0, empUses: 0, camera: 'chase', mission: mission.snapshot() });
-  bike.position.set(world.spawnPoint.x, world.spawnPoint.y, world.spawnPoint.z); bike.rotation.set(0, 0, 0); bike.visible = true;
+  bike.position.set(world.spawnPoint.x, world.spawnPoint.y, world.spawnPoint.z); bike.rotation.set(0, 0, 0); ride.reset(); bike.visible = true;
   hitConfirmUntil = 0; speed = 0; heading = 0; vertical = { y: world.spawnPoint.y, vy: 0, grounded: true, previousFloor: world.spawnPoint.y }; autoRoute = []; autoObjective = -1; autoRouteKey = ''; autoCollision = 0; tacticalMap.close(); shootTimer = 0; missileTimer = 0; spawnTimer = 0; hitTimer = 1.5; cameraShake = 0; keys.clear(); seed = 94;
   camera.fov = 62; camera.updateProjectionMatrix(); camera.position.set(bike.position.x, bike.position.y + 6, bike.position.z + 11);
   $('menu').hidden = true; $('end').hidden = true;
@@ -232,7 +234,9 @@ function update(dt) {
     const floor = world.heightAt(bike.position.x, bike.position.z, oldHeight);
     vertical = stepVertical(vertical, floor, dt); bike.position.y = vertical.y; state.airborne = !vertical.grounded;
     if (vertical.landed && vertical.impact > 10) { cameraShake = Math.min(.5,vertical.impact*.02); fx.trail(bike.position,heading,true); }
-    bike.rotation.set(THREE.MathUtils.damp(bike.rotation.x, state.airborne ? -.12 : -(floor - oldHeight) * 1.5, 8, dt), heading, -steer * Math.min(Math.abs(speed) / 105, .28));
+    // Frame pose (yaw, terrain pitch, lean) + suspension on the sprung body.
+    for (const hit of ride.update(dt, { heading, speed, roll: -steer * Math.min(Math.abs(speed) / 105, .28), vertical })) cameraShake = Math.max(cameraShake, Math.min(.3, hit.speed * .04));
+    state.suspension = ride.susp.snapshot();
     bike.userData.update?.(speed * dt);
     if (firing && shootTimer <= 0) { fire(bike.position, heading, false, nearestTarget(.14, 150)?.target); shootTimer = .12; }
     dustTimer -= dt; if (Math.abs(speed) > 5 && dustTimer <= 0) { fx.trail(bike.position, heading, boosting); dustTimer = boosting ? .05 : .1; }

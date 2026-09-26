@@ -543,3 +543,37 @@ test.describe('REDLINE MX track features & cup', () => {
     await ai.snap('cup-round-2');
   });
 });
+
+test.describe('REDLINE MX suspension', () => {
+  test('18 · suspension squats, soaks up a big landing and settles', async ({ page, ai }) => {
+    await startRace(page, ai);
+    await ai.step('throttle squats the rear (nose lifts)', async () => {
+      await page.keyboard.down('z');
+      const s = await ai.waitFor((s) => s.suspension.pitch > 0.01, { timeout: 5_000, message: 'squat' });
+      await ai.check('body pitch under throttle', s.suspension.pitch, (p) => p > 0.01);
+      await page.keyboard.up('z');
+    });
+    // A flat stretch well clear of ramps, so the drop lands on level ground.
+    const { ramps } = await debug(page, 'track');
+    let x = 80;
+    while (ramps.some((r) => x > r.x0 - 30 && x < r.end + 30)) x += 5;
+    await ai.step(`drop the bike from 6 m at ${x} m`, async () => {
+      await debug(page, 'drop', x, 6, 3); // nearly straight down, so it lands (and stays) on the flat
+      const air = await ai.waitFor((s) => s.player.airborne && s.suspension.front.compression < 0.15, { timeout: 2_000, message: 'falling, wheels drooping' });
+      await ai.check('wheels droop in the air', air.suspension.front.compression, (c) => c < 0.15);
+      const landed = await ai.waitFor((s) => !s.player.airborne, { timeout: 5_000, message: 'touchdown' });
+      await ai.check('rider stayed on', landed.player.crashed, (c) => !c);
+    });
+    await ai.step('forks and shock compress hard', async () => {
+      const s = await ai.waitFor((s) => s.suspension.front.peak > 0.9 && s.suspension.rear.peak > 0.9, { timeout: 3_000, message: 'compression' });
+      await ai.check('front peak compression', s.suspension.front.peak, (c) => c > 0.9);
+    });
+    await ai.step('then rebound and settle at sag', async () => {
+      const s = await ai.waitFor((s) => s.suspension.front.compression > 0.1 && s.suspension.front.compression < 0.6 && Math.abs(s.suspension.heave) < 0.05, { timeout: 5_000, message: 'settle' });
+      await ai.check('front back near sag', s.suspension.front.compression, (c) => c > 0.1 && c < 0.6);
+      await ai.check('body back at ride height', s.suspension.heave, (h) => Math.abs(h) < 0.05);
+    });
+    await ai.snap('settled');
+  });
+});
+

@@ -10,6 +10,7 @@ import { buildWorld } from './world.js';
 import { buildBike, WHEEL_R, WHEELBASE } from './bikes.js';
 import { Rider } from './rider.js';
 import { optimizeBike } from './optimize.js';
+import { createRiderSuspension } from './suspension.js';
 import { createItems } from './items.js';
 import { createAudio } from './audio.js';
 import { createMusic } from './music.js';
@@ -78,6 +79,7 @@ const riders = ROSTER.map((r, i) => {
   rider.color = r.color;
   rider.bikeId = r.bike;
   rider.mesh = optimizeBike(buildBike(r.bike, r.color, r.num));
+  rider.susp = createRiderSuspension(rider, rider.mesh, track);
   scene.add(rider.mesh.root);
   return rider;
 });
@@ -439,7 +441,13 @@ function handleEvents(events) {
   for (const e of events) {
     const me = e.rider === player;
     const r = e.rider;
-    if (e.type === 'crash') {
+    r?.susp?.onEvent(e);
+    if (e.type === 'bottomOut') {
+      // Suspension ran out of travel: a thump of dirt at that wheel.
+      const dx = e.end === 'front' ? WHEELBASE / 2 : -WHEELBASE / 2;
+      for (let i = 0; i < 5; i++) world.puff(r.x + dx, r.y, r.z, 1.4);
+      if (me) shake = Math.max(shake, Math.min(0.5, e.speed * 0.08));
+    } else if (e.type === 'crash') {
       for (let i = 0; i < 25; i++) world.puff(r.x, r.y, r.z, 2);
       if (me) { callout('CRASH!', 'red', 1100); shake = 0.8; audio.crash(); }
     } else if (e.type === 'shield' && me) {
@@ -502,6 +510,7 @@ function simulate(dt) {
     if (r === player) input = state === 'finished' ? {} : autopilot ? aiInput(r, 1) : humanInput();
     else input = aiInput(r, 0.55);
     r.update(dt, input, events);
+    for (const ev of r.susp.step(dt)) events.push({ ...ev, rider: r });
     if (r.finishTime == null && r.x >= FINISH_X) r.finishTime = raceTime;
   }
   if (state === 'racing') {
@@ -573,6 +582,7 @@ function renderRiders(dt, t) {
     const lift = r.crashed ? 0.6 : Math.sin(r.wheelie) * WHEELBASE * 0.5;
     m.root.position.set(r.x, r.y + lift, r.z);
     m.root.rotation.z = r.pitch;
+    r.susp.pose();
     const spin = (r.speed * dt) / WHEEL_R;
     m.rear.rotation.z -= spin;
     m.front.rotation.z -= spin;
@@ -765,6 +775,7 @@ const app = (window.__app = {
         stats: p.stats, patch: !!p.patch,
       },
       landingSlope: predictLanding(p).slope,
+      suspension: p.susp.susp.snapshot(),
       laneAhead: [0, 1, 2, 3].map((l) => ({
         mud: track.inMud(p.x + 8, l),
         rival: riders.some((o) => o !== p && o.lane === l && o.x > p.x - 1 && o.x - p.x < 9),
@@ -803,8 +814,17 @@ app.debug = {
     player.pitch = 0;
   },
   shield() { player.shields = Math.min(3, player.shields + 1); },
+  // Drop the player level from `height` metres above x (suspension tests).
+  drop(x, height, speed = 20) {
+    Object.assign(player, { x, y: track.height(x) + height, airborne: true, vx: speed, vy: 0, speed, pitch: track.slope(x), airSpin: 0, lean: 0, crashTimer: 0 });
+  },
   charge(n = 100) { charge(n); },
   giveCoins(n) { save.coins += n; writeSave(save); garage.render(); },
+  // Where the player's bike is on screen, in CSS pixels (for close-up screenshots).
+  screenPos() {
+    const v = player.mesh.root.getWorldPosition(new THREE.Vector3()).setY(player.y + 0.9).project(camera);
+    return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight };
+  },
 };
 
 setupTouch();

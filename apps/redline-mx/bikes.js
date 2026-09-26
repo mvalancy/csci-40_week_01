@@ -39,10 +39,16 @@ function pair(parent, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) {
   return [mesh(parent, geo, mat, x, y, z, rx, ry, rz), mesh(parent, geo, mat, x, y, -z, -rx, -ry, rz)];
 }
 // Stretch a unit-height (y) geometry between two xy points.
+// A strut that ends on a wheel axle (fork leg, swingarm) is tagged as a
+// suspension link: it stays a separate mesh and re-stretches as the wheel moves.
+const AXLES = { front: [FX, WHEEL_R], rear: [RX, WHEEL_R] };
+const atAxle = (p) => Object.keys(AXLES).find((k) => AXLES[k][0] === p[0] && AXLES[k][1] === p[1]);
 function strut(parent, geo, mat, a, b, z = 0) {
   const dx = b[0] - a[0], dy = b[1] - a[1];
   const m = mesh(parent, geo, mat, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z, 0, 0, Math.atan2(dy, dx) - PI / 2);
   m.scale.y = Math.hypot(dx, dy);
+  const end = atAxle(a) || atAxle(b);
+  if (end) m.userData.link = { end, anchor: new THREE.Vector3(...(atAxle(a) ? b : a), z), offset: new THREE.Vector3(0, 0, z) };
   return m;
 }
 const unitCyl = (r, seg = 10) => new THREE.CylinderGeometry(r, r, 1, seg);
@@ -620,6 +626,8 @@ export function buildBike(modelId = 'dirt', color = '#ff3b3b', number = '1') {
   const b = make(color, String(number));
   const root = new THREE.Group(); // positioned at ground contact, rotated by pitch
   root.add(b.body);
+  const links = [];
+  b.body.traverse((o) => { if (o.userData.link) links.push({ mesh: o, ...o.userData.link }); });
   b.body.add(b.rider);
-  return { root, body: b.body, rider: b.rider, rear: b.rear, front: b.front, flame: b.flame, extras: b.extras || [], model: modelId };
+  return { root, body: b.body, rider: b.rider, rear: b.rear, front: b.front, flame: b.flame, extras: b.extras || [], links, model: modelId };
 }

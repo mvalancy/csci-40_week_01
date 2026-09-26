@@ -13,6 +13,7 @@ csci-40_f26_demos/
 ├── vite.config.js           auto-discovers apps/*/index.html (don't edit per app)
 ├── playwright.config.js     auto-discovers apps/*/*.spec.js (don't edit per app)
 ├── shared/                  SHARED — read, import, don't change casually
+│   ├── lib/                 shared code for every app: math, springs, vehicle suspension, three.js rigs (see shared/lib/README.md)
 │   ├── testing/ai.js        the `ai` test fixture (HUD overlay, steps, checks)
 │   ├── testing/overlay.js   the on-screen "CLAUDE IS TESTING" HUD
 │   └── hub.spec.js          test for the hub page
@@ -32,7 +33,7 @@ csci-40_f26_demos/
 1. **Create your app with `OWNER=<you> npm run new <slug> "Title"`** (e.g. `OWNER=codex`). The `owner` in `meta.json` puts a badge on the hub card and lets `npm run loop --owner=<you>` find your apps. It refuses to overwrite an existing folder. If the name is taken, pick another; that folder belongs to another agent.
 2. **Only edit files inside `apps/<your-slug>/`.** Never modify, move, or delete another app's folder, even to "fix" it.
 3. **Shared files** (`shared/`, `index.html`, configs, `scripts/`, `package.json`) change only when the user asks, and the change must be additive and backwards compatible.
-4. **Imports stay local or come from npm packages.** Never import from another app's folder. If code should be shared, ask the user first. Then put it in `shared/`.
+4. **Imports stay local, come from npm packages, or come from `shared/lib/`.** Never import from another app's folder. Check `shared/lib/README.md` before writing your own math, springs or suspension. To make code shared, ask the user first, then move it into `shared/lib/` with a test in `shared/lib/tests/` (`npm run test:lib`). Changes there must stay backwards compatible, because other apps use them.
 5. No CDNs or network fetches at runtime. Everything is installed locally so the class works offline.
 
 ## Sharing the screen
@@ -52,8 +53,8 @@ Stay on your side. Don't resize or move the other agent's window.
 
   | game | Pages project | build | live |
   |---|---|---|---|
-  | REDLINE MX | `csci-40-week-01-redline-mx` (rebuilds when `apps/redline-mx/` or the root package files change) | `npm ci && npx vite build --config apps/redline-mx/standalone.vite.config.js` → `apps/redline-mx/dist/` | https://redlinemx.mattvalancy.com |
-  | ASHDRIVE | `csci-40-week-01-ashdrive` (rebuilds when `apps/ashdrive/` or the root package files change) | `npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js` → `apps/ashdrive/dist/` | https://ashdrive.mattvalancy.com |
+  | REDLINE MX | `csci-40-week-01-redline-mx` (rebuilds when `apps/redline-mx/`, `shared/lib/` or the root package files change) | `npm ci && npx vite build --config apps/redline-mx/standalone.vite.config.js` → `apps/redline-mx/dist/` | https://redlinemx.mattvalancy.com |
+  | ASHDRIVE | `csci-40-week-01-ashdrive` (rebuilds when `apps/ashdrive/`, `shared/lib/` or the root package files change) | `npm ci && npx vite build --config apps/ashdrive/standalone.vite.config.js` → `apps/ashdrive/dist/` | https://ashdrive.mattvalancy.com |
 - An app with its own `standalone.vite.config.js` builds with relative paths (`base: './'`) and is left out of the lab build. The lab hub is local-only and isn't deployed.
 - Cloudflare settings are code: `npm run setup:cloudflare` (add `-- --dry-run` to preview) applies the table above. Edit `scripts/cloudflare-setup.js` instead of the dashboard.
 - Manual fallback: `npm run deploy` (REDLINE MX) or `npm run deploy:ashdrive`.
@@ -94,6 +95,7 @@ Plain Canvas 2D, WebAudio, and DOM work too. **Need a new package?** Tell the us
 | `npm run show <slug>` | **headed** test run, slowed down, with the HUD overlay |
 | `npm test <slug>` | headless test run for one app |
 | `npm test` | every app plus the hub |
+| `npm run test:lib` | unit tests for `shared/lib/` (no browser) |
 | `npm run report <slug>` | open that app's HTML report (screenshots and video) |
 | `npm run demo` | the REDLINE MX showcase, headed |
 | `npm run loop [slug …] [--right] [--owner=<you>]` | headed tests forever, round after round (summary in `test-results/loop.log`) |

@@ -282,6 +282,9 @@ export class Rider {
         return;
       }
       const along = this.vx * Math.cos(a) + this.vy * Math.sin(a);
+      // How hard the suspension gets hit: speed into the slope, and which end touches first.
+      const impact = Math.max(0, this.vx * Math.sin(a) - this.vy * Math.cos(a));
+      const noseDown = wrap(a - this.pitch);
       const perfect = diff < 0.18;
       this.speed = Math.max(0, along) * (perfect ? 1.08 : 1 - 0.3 * diff) * (flips ? 1.2 : 1);
       this.pitch = a;
@@ -290,7 +293,7 @@ export class Rider {
         this.flips += flips;
         this.heat = 0; // style points: a flip cools the engine
       }
-      events.push({ type: 'land', rider: this, perfect, diff, flips, backflip: this.airSpin > 0 });
+      events.push({ type: 'land', rider: this, perfect, diff, flips, backflip: this.airSpin > 0, impact, noseDown });
     }
   }
 }

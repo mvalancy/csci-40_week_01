@@ -1,9 +1,13 @@
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Original procedural remote combat motorcycle. Forward is local negative Z.
+// The returned group is the physics frame (tire contact, heading, terrain pitch);
+// everything visible hangs off its sprung `body`, which the suspension moves.
 export function createCombatBike(THREE) {
-  const bike = new THREE.Group();
-  bike.name = 'AD-07 unmanned combat bike';
+  const root = new THREE.Group();
+  root.name = 'AD-07 unmanned combat bike';
+  const bike = new THREE.Group(); // sprung body
+  root.add(bike);
   const material = (color, metalness = .6, roughness = .55) => new THREE.MeshStandardMaterial({ color, metalness, roughness });
   const armor = material('#7e2725', .65, .6);
   const edge = material('#ae4540', .7, .45);
@@ -23,11 +27,16 @@ export function createCombatBike(THREE) {
     if (axis === 'z') mesh.rotation.x = Math.PI / 2;
     mesh.position.set(...position); bike.add(mesh); return mesh;
   }
-  function beam(from, to, radius, mat = steel) {
+  // `axle` marks a suspension link whose `from` end sits on that wheel's axle:
+  // it stays unbaked and re-stretches as the wheel moves.
+  const links = [];
+  function beam(from, to, radius, mat = steel, axle) {
     const start = new THREE.Vector3(...from), end = new THREE.Vector3(...to);
     const delta = end.clone().sub(start);
-    const mesh = cylinder(radius, delta.length(), start.add(end).multiplyScalar(.5).toArray(), mat);
+    const mesh = cylinder(radius, 1, start.clone().add(end).multiplyScalar(.5).toArray(), mat);
+    mesh.scale.y = delta.length();
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.normalize());
+    if (axle) { mesh.userData.link = true; links.push({ mesh, end: axle, from: start, anchor: end }); }
     return mesh;
   }
   // Thick road tires with separately modelled tread blocks and inset brake discs.
@@ -55,9 +64,9 @@ export function createCombatBike(THREE) {
   box([.86, .6, 1.1], [0, 1.13, .25], steel);
   for (let z = -.22; z < .8; z += .14) box([.97, .075, .045], [0, 1.28, z], dark);
   for (const side of [-1, 1]) {
-    beam([side * .43, .68, 1.38], [side * .48, 1.23, .4], .095, dark);
-    beam([side * .37, .7, -1.43], [side * .36, 1.68, -.8], .07);
-    beam([side * .42, .7, 1.36], [side * .42, 1.5, .65], .08);
+    beam([side * .43, .68, 1.38], [side * .48, 1.23, .4], .095, dark, 'rear'); // swingarm
+    beam([side * .37, .7, -1.43], [side * .36, 1.68, -.8], .07, steel, 'front'); // fork leg
+    beam([side * .42, .7, 1.36], [side * .42, 1.5, .65], .08, steel, 'rear'); // shock strut
     for (let y = .92; y < 1.4; y += .075) cylinder(.115, .026, [side * .42, y, 1.12 - (y - .92) * .65], dark);
     cylinder(.2, .13, [side * .53, 1.05, .35], steel, 'x');
   }
@@ -99,7 +108,7 @@ export function createCombatBike(THREE) {
   function bake(group) {
     const batches = new Map();
     for (const child of [...group.children]) {
-      if (!child.isMesh) continue;
+      if (!child.isMesh || child.userData.link) continue;
       child.updateMatrix();
       const geometry = child.geometry.clone().applyMatrix4(child.matrix);
       if (!batches.has(child.material)) batches.set(child.material, []);
@@ -114,7 +123,15 @@ export function createCombatBike(THREE) {
   }
   for (const wheel of wheels) bake(wheel);
   bake(bike);
-  bike.userData.wheels = wheels;
-  bike.userData.update = (distance) => { for (const wheel of wheels) wheel.rotation.x -= distance / .69; };
-  return bike;
+  // Link ends are stored relative to their wheel centre so they follow the axle.
+  const [front, rear] = wheels;
+  for (const link of links) link.offset = link.from.clone().sub((link.end === 'front' ? front : rear).position);
+  root.userData.body = bike;
+  root.userData.wheels = wheels;
+  root.userData.front = front;
+  root.userData.rear = rear;
+  root.userData.links = links;
+  root.userData.wheelbase = rear.position.z - front.position.z;
+  root.userData.update = (distance) => { for (const wheel of wheels) wheel.rotation.x -= distance / .69; };
+  return root;
 }

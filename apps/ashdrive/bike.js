@@ -66,8 +66,13 @@ export function createCombatBike(THREE) {
   for (const side of [-1, 1]) {
     beam([side * .43, .68, 1.38], [side * .48, 1.23, .4], .095, dark, 'rear'); // swingarm
     beam([side * .37, .7, -1.43], [side * .36, 1.68, -.8], .07, steel, 'front'); // fork leg
-    beam([side * .42, .7, 1.36], [side * .42, 1.5, .65], .08, steel, 'rear'); // shock strut
-    for (let y = .92; y < 1.4; y += .075) cylinder(.115, .026, [side * .42, y, 1.12 - (y - .92) * .65], dark);
+    const shock = beam([side * .42, .7, 1.36], [side * .42, 1.5, .65], .08, steel, 'rear'); // shock strut
+    // Coil spring: one merged mesh in the strut's unit space (y from -.5 to .5),
+    // so it rides along and its coils squeeze together as the strut shortens.
+    const coils = [];
+    for (let t = .275; t < .87; t += .094) coils.push(new THREE.CylinderGeometry(.115, .115, .024, 16).translate(0, t - .5, 0));
+    shock.add(new THREE.Mesh(mergeGeometries(coils), dark));
+    for (const coil of coils) coil.dispose();
     cylinder(.2, .13, [side * .53, 1.05, .35], steel, 'x');
   }
   // Angular red armored shell, no rider or luminous wheel rims.
